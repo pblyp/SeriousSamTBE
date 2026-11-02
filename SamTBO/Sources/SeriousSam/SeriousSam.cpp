@@ -528,6 +528,21 @@ static void DetectDemoData(void)
 #endif
 }
 
+#ifndef FIRST_ENCOUNTER
+// The First Encounter's levels come from its own folder (+cdpath); the campaign starts with
+// them, so say so if they aren't there
+static void CheckFirstEncounterData(void)
+{
+  if (FileExists(CTFILENAME("Levels\\01_Hatshepsut.wld"))) {
+    CPrintF(TRANS("The First Encounter's files: %s\n"), (const char *)(CTString&)_fnmCDPath);
+    return;
+  }
+  WarningMessage(TRANS("The First Encounter's files were not found, so its levels can't be played.\n"
+    "Start the game with +cdpath and the folder where The First Encounter is installed,\n"
+    "e.g. +cdpath \"/games/Serious Sam Classic The First Encounter\""));
+}
+#endif
+
 void InitializeGame(void)
 {
   try {
@@ -763,6 +778,9 @@ BOOL Init( HINSTANCE hInstance, int nCmdShow, CTString strCmdLine)
 #endif
   SE_LoadDefaultFonts();
   DetectDemoData();
+#ifndef FIRST_ENCOUNTER
+  CheckFirstEncounterData();
+#endif
   // now print the output of command line parsing
   CPrintF("%s", (const char *) cmd_strOutput);
 

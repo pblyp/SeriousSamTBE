@@ -21,6 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <Engine/Base/ErrorReporting.h>
 #include <Engine/Base/FileName.h>
 #include <Engine/Base/Unzip.h>
+#include <Engine/Base/ArchiveReader.h>
 #include <Engine/Base/Translation.h>
 #include <Engine/Math/Functions.h>
 #include <Engine/Base/DynamicLoader.h>
@@ -108,9 +109,10 @@ static CDynamicLoader *_hOV = NULL;
 
 class CDecodeData_OGG {
 public:
-  FILE *ogg_fFile;      // the stdio file that ogg is in
+  CArchiveReader *ogg_parFile;  // the file that ogg is in (its own, as it is read while mixing)
   SLONG ogg_slOffset;   // offset where the ogg starts in the file (!=0 for oggs in zip)
   SLONG ogg_slSize;     // size of ogg in the file (!=filesize for oggs in zip)
+  SLONG ogg_slPos;      // how much of the ogg has been read
   OggVorbis_File *ogg_vfVorbisFile;  // the decoder file
   WAVEFORMATEX ogg_wfeFormat; // format of sound
 };
@@ -147,7 +149,7 @@ static size_t ogg_read_func  (void *ptr, size_t size, size_t nmemb, void *dataso
   CDecodeData_OGG *pogg = (CDecodeData_OGG *)datasource;
   // calculate how much can be read at most
   SLONG slToRead = size*nmemb;
-  SLONG slCurrentPos = ftell(pogg->ogg_fFile)-pogg->ogg_slOffset;
+  SLONG slCurrentPos = pogg->ogg_slPos;
   SLONG slSizeLeft = ClampDn(pogg->ogg_slSize-slCurrentPos, (SLONG)0);
   slToRead = ClampUp(slToRead, slSizeLeft);
 
@@ -158,7 +160,12 @@ static size_t ogg_read_func  (void *ptr, size_t size, size_t nmemb, void *dataso
   if (slToRead<=0) {
     return 0;
   }
-  return fread(ptr, size, slToRead/size, pogg->ogg_fFile);
+  SLONG slRead = pogg->ogg_parFile->ReadAt(pogg->ogg_slOffset+slCurrentPos, ptr, slToRead);
+  if (slRead<=0) {
+    return 0;
+  }
+  pogg->ogg_slPos += slRead;
+  return slRead/size;
 }
 
 static int ogg_seek_func  (void *datasource, ogg_int64_t offset, int whence)
@@ -294,10 +301,11 @@ CSoundDecoder::CSoundDecoder(const CTFileName &fnm)
     }
 
     sdc_pogg = new CDecodeData_OGG;
-    sdc_pogg->ogg_fFile = NULL;
+    sdc_pogg->ogg_parFile = NULL;
     sdc_pogg->ogg_vfVorbisFile = NULL;
     sdc_pogg->ogg_slOffset = 0;
     sdc_pogg->ogg_slSize = 0;
+    sdc_pogg->ogg_slPos = 0;
     INDEX iZipHandle = 0;
 
     try {
@@ -318,30 +326,26 @@ CSoundDecoder::CSoundDecoder(const CTFileName &fnm)
           ThrowF_t(TRANS("encoded audio in archives must not be compressed!\n"));
         }
         // open ogg file
-        sdc_pogg->ogg_fFile = fopen(fnmZip, "rb");
+        sdc_pogg->ogg_parFile = OpenArchiveReader(fnmZip);
         // if error
-        if (sdc_pogg->ogg_fFile==0) {
+        if (sdc_pogg->ogg_parFile==NULL) {
           ThrowF_t(TRANS("cannot open archive '%s'"), (const char*)fnmZip);
         }
         // remember offset and size
         sdc_pogg->ogg_slOffset = slOffset;
         sdc_pogg->ogg_slSize = slSizeUncompressed;
-        fseek(sdc_pogg->ogg_fFile, slOffset, SEEK_SET);
 
       // if not in zip
       } else if (iFileType==EFP_FILE) {
         // open ogg file
-        sdc_pogg->ogg_fFile = fopen(fnmExpanded, "rb");
+        sdc_pogg->ogg_parFile = OpenArchiveReader(fnmExpanded);
         // if error
-        if (sdc_pogg->ogg_fFile==0) {
+        if (sdc_pogg->ogg_parFile==NULL) {
           ThrowF_t(TRANS("cannot open encoded audio file"));
         }
         // remember offset and size
         sdc_pogg->ogg_slOffset = 0;
-
-        fseek(sdc_pogg->ogg_fFile, 0, SEEK_END);
-        sdc_pogg->ogg_slSize = ftell(sdc_pogg->ogg_fFile);
-        fseek(sdc_pogg->ogg_fFile, 0, SEEK_SET);
+        sdc_pogg->ogg_slSize = sdc_pogg->ogg_parFile->GetSize();
       // if not found
       } else {
         ThrowF_t(TRANS("file not found"));
@@ -382,9 +386,9 @@ CSoundDecoder::CSoundDecoder(const CTFileName &fnm)
         delete sdc_pogg->ogg_vfVorbisFile;
         sdc_pogg->ogg_vfVorbisFile = NULL;
       }
-      if (sdc_pogg->ogg_fFile!=NULL) {
-        fclose(sdc_pogg->ogg_fFile);
-        sdc_pogg->ogg_fFile = NULL;
+      if (sdc_pogg->ogg_parFile!=NULL) {
+        delete sdc_pogg->ogg_parFile;
+        sdc_pogg->ogg_parFile = NULL;
       }
       if (iZipHandle!=0) {
         UNZIPClose(iZipHandle);
@@ -523,9 +527,9 @@ void CSoundDecoder::Clear(void)
       delete sdc_pogg->ogg_vfVorbisFile;
       sdc_pogg->ogg_vfVorbisFile = NULL;
     }
-    if (sdc_pogg->ogg_fFile!=NULL) {
-      fclose(sdc_pogg->ogg_fFile);
-      sdc_pogg->ogg_fFile = NULL;
+    if (sdc_pogg->ogg_parFile!=NULL) {
+      delete sdc_pogg->ogg_parFile;
+      sdc_pogg->ogg_parFile = NULL;
     }
     delete sdc_pogg;
     sdc_pogg = NULL;
@@ -540,7 +544,7 @@ void CSoundDecoder::Reset(void)
   } else if (sdc_pogg!=NULL) {
     // so instead, we reinit
     pov_clear(sdc_pogg->ogg_vfVorbisFile);
-    fseek(sdc_pogg->ogg_fFile, sdc_pogg->ogg_slOffset, SEEK_SET);
+    sdc_pogg->ogg_slPos = 0;
     pov_open_callbacks(sdc_pogg, sdc_pogg->ogg_vfVorbisFile, NULL, 0, ovcCallbacks);
   }
 }

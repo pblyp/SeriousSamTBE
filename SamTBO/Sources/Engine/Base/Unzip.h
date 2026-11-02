@@ -47,6 +47,8 @@ const CTFileName &UNZIPGetFileAtIndex(INDEX i);
 INDEX UNZIPGetFileIndex(const CTFileName &fnm);
 // check if a file is from a mod's zip
 BOOL UNZIPIsFileAtIndexMod(INDEX i);
+// check if a file is from a zip in the CD path (The First Encounter's files)
+BOOL UNZIPIsFileAtIndexCD(INDEX i);
 
 
 #endif  /* include-once check. */

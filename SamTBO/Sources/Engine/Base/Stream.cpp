@@ -1640,6 +1640,23 @@ static void VerifyDirsExist(const char *_path)
 }
 
 // Expand a file's filename to full path
+// check if a file is read from the CD path (The First Encounter's files), loose or in an archive
+BOOL IsFileFromCDPath(const CTFileName &fnmFile)
+{
+  if (_fnmCDPath=="") {
+    return FALSE;
+  }
+  CTFileName fnmExpanded;
+  const INDEX iType = ExpandFilePath(EFP_READ, fnmFile, fnmExpanded);
+  if (iType==EFP_FILE) {
+    return fnmExpanded.HasPrefix(_fnmCDPath);
+  } else if (iType==EFP_BASEZIP || iType==EFP_MODZIP) {
+    const INDEX iFile = UNZIPGetFileIndex(fnmExpanded);
+    return iFile>=0 && UNZIPIsFileAtIndexCD(iFile);
+  }
+  return FALSE;
+}
+
 INDEX ExpandFilePath(ULONG ulType, const CTFileName &fnmFile, CTFileName &fnmExpanded)
 {
   CTFileName fnmFileAbsolute = fnmFile;

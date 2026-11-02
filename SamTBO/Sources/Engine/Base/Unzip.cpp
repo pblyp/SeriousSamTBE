@@ -23,6 +23,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <Engine/Base/ErrorReporting.h>
 #include <Engine/Base/Console.h>
 #include <Engine/Base/Synchronization.h>
+#include <Engine/Base/ArchiveReader.h>
+#include <Engine/Base/Unzip.h>
 #include <Engine/Math/Functions.h>
 
 #include <Engine/Templates/StaticArray.cpp>
@@ -122,6 +124,7 @@ public:
   ULONG ze_ulCRC;               // checksum of the file
   BOOL ze_bStored;              // set if file is not compressed, but stored
   BOOL ze_bMod;                 // set if from a mod's archive
+  BOOL ze_bCD;                  // set if from an archive in the CD path (The First Encounter's files)
 
   void Clear(void)
   {
@@ -136,8 +139,9 @@ public:
   BOOL zh_bOpen;          // set if the handle is used
   CZipEntry zh_zeEntry;   // the entry itself
   z_stream zh_zstream;    // zlib filestream for decompression
-  FILE *zh_fFile;         // open handle of the archive
-#define BUF_SIZE  1024
+  CArchiveReader *zh_parArchive;  // the archive, open for reading
+  SLONG zh_slReadPos;     // how much of the entry's compressed data zlib has been given
+#define BUF_SIZE  (64*1024)
   UBYTE *zh_pubBufIn;     // input buffer
 
   CZipHandle(void);
@@ -173,7 +177,8 @@ CTString GetZlibError(int ierr)
 CZipHandle::CZipHandle(void) 
 {
   zh_bOpen = FALSE;
-  zh_fFile = NULL;
+  zh_parArchive = NULL;
+  zh_slReadPos = 0;
   zh_pubBufIn = NULL;
   memset(&zh_zstream, 0, sizeof(zh_zstream));
 }
@@ -193,10 +198,11 @@ void CZipHandle::Clear(void)
     zh_pubBufIn = NULL;
   }
   // close the zip archive file
-  if (zh_fFile!=NULL) {
-    fclose(zh_fFile);
-    zh_fFile = NULL;
+  if (zh_parArchive!=NULL) {
+    delete zh_parArchive;
+    zh_parArchive = NULL;
   }
+  zh_slReadPos = 0;
 }
 void CZipHandle::ThrowZLIBError_t(int ierr, const CTString &strDescription)
 {
@@ -226,44 +232,156 @@ void ConvertSlashes(char *p)
   }
 }
 
-#define READ_ZIPFIELD(f, x) { size_t _size = fread(&x, sizeof(x), 1, f); BYTESWAP(x); }
+// reading files with stdio
+class CFileArchiveReader : public CArchiveReader {
+public:
+  FILE *far_pFile;
+  SLONG far_slSize;
+  SLONG far_slPos;    // where the file is (no seeking when reading on), -1 if unknown
+
+  CFileArchiveReader(FILE *pFile) : far_pFile(pFile)
+  {
+    fseek(far_pFile, 0, SEEK_END);
+    far_slSize = ftell(far_pFile);
+    far_slPos = -1;
+  }
+  ~CFileArchiveReader(void)
+  {
+    fclose(far_pFile);
+  }
+  SLONG GetSize(void)
+  {
+    return far_slSize;
+  }
+  SLONG ReadAt(SLONG slOffset, void *pvBuffer, SLONG slLen)
+  {
+    if (slOffset!=far_slPos) {
+      if (fseek(far_pFile, slOffset, SEEK_SET)!=0) {
+        far_slPos = -1;
+        return -1;
+      }
+      far_slPos = slOffset;
+    }
+    const size_t ctRead = fread(pvBuffer, 1, slLen, far_pFile);
+    if (ctRead==0 && ferror(far_pFile)) {
+      clearerr(far_pFile);
+      far_slPos = -1;
+      return -1;
+    }
+    far_slPos += (SLONG)ctRead;
+    return (SLONG)ctRead;
+  }
+};
+
+CArchiveReader *OpenArchiveReader(const CTFileName &fnm)
+{
+  FILE *pFile = fopen(fnm, "rb");
+  if (pFile==NULL) {
+    return NULL;
+  }
+  return new CFileArchiveReader(pFile);
+}
+
+// what is read while reading an archive's directory, freed in any case
+class CZipDirectoryBuffers {
+public:
+  CArchiveReader *zdb_parArchive;
+  UBYTE *zdb_pubTail;
+  UBYTE *zdb_pubDir;
+  CZipDirectoryBuffers(void) : zdb_parArchive(NULL), zdb_pubTail(NULL), zdb_pubDir(NULL) {}
+  ~CZipDirectoryBuffers(void)
+  {
+    if (zdb_parArchive!=NULL) delete zdb_parArchive;
+    if (zdb_pubTail!=NULL) FreeMemory(zdb_pubTail);
+    if (zdb_pubDir!=NULL) FreeMemory(zdb_pubDir);
+  }
+};
+
+// the (little endian) fields of zip structures, read from memory
+class CZipFields {
+public:
+  const UBYTE *zf_pub;
+  SLONG zf_slLeft;
+  BOOL zf_bOverrun;   // set if there was less than what was read
+
+  CZipFields(const UBYTE *pub, SLONG slSize) : zf_pub(pub), zf_slLeft(slSize), zf_bOverrun(FALSE) {}
+  template<class Type> void Read(Type &x)
+  {
+    if (zf_slLeft<(SLONG)sizeof(x)) {
+      memset(&x, 0, sizeof(x));
+      zf_bOverrun = TRUE;
+      return;
+    }
+    memcpy(&x, zf_pub, sizeof(x));
+    BYTESWAP(x);
+    zf_pub += sizeof(x);
+    zf_slLeft -= sizeof(x);
+  }
+  void ReadBytes(void *pv, SLONG slLen)
+  {
+    if (zf_slLeft<slLen) {
+      memset(pv, 0, slLen);
+      zf_bOverrun = TRUE;
+      return;
+    }
+    memcpy(pv, zf_pub, slLen);
+    zf_pub += slLen;
+    zf_slLeft -= slLen;
+  }
+  void Skip(SLONG slLen)
+  {
+    if (zf_slLeft<slLen) {
+      slLen = zf_slLeft;
+      zf_bOverrun = TRUE;
+    }
+    zf_pub += slLen;
+    zf_slLeft -= slLen;
+  }
+};
+
+#define READ_ZIPFIELD(zf, x) (zf).Read(x)
 
 // read directory of a zip archive and add all files in it to active set
 void ReadZIPDirectory_t(CTFileName *pfnmZip)
 {
-
-  FILE *f = fopen(*pfnmZip, "rb");
-  if (f==NULL) {
+  CZipDirectoryBuffers zdb;
+  zdb.zdb_parArchive = OpenArchiveReader(*pfnmZip);
+  if (zdb.zdb_parArchive==NULL) {
     ThrowF_t(TRANS("%s: Cannot open file (%s)"), (const char *) (CTString&)*pfnmZip, strerror(errno));
   }
-  // start at the end of file, minus expected minimum overhead
-  fseek(f, 0, SEEK_END);
-  int iPos = ftell(f)-sizeof(SLONG)-sizeof(EndOfDir)+2;
-  // do not search more than 128k (should be around 65k at most)
-  int iMinPos = iPos-128*1024;
-  if (iMinPos<0) {
-    iMinPos = 0;
+  CArchiveReader &ar = *zdb.zdb_parArchive;
+
+  // read the end of the file, where the end of the central directory is (after a comment of
+  // up to 64k; do not search more than 128k), at once
+  const SLONG slFileSize = ar.GetSize();
+  const SLONG slEODSize = sizeof(SLONG)+sizeof(EndOfDir);
+  const SLONG slTail = Min(slFileSize, SLONG(slEODSize+128*1024));
+  if (slTail<slEODSize) {
+    ThrowF_t(TRANS("%s: Cannot find 'end of central directory'"), (const char *) (CTString&)*pfnmZip);
+  }
+  zdb.zdb_pubTail = (UBYTE*)AllocMemory(slTail);
+  if (ar.ReadAt(slFileSize-slTail, zdb.zdb_pubTail, slTail)!=slTail) {
+    ThrowF_t(TRANS("%s: Error reading central directory"), (const char *) (CTString&)*pfnmZip);
   }
 
   EndOfDir eod;
   BOOL bEODFound = FALSE;
-  // while not at beginning
-  for(; iPos>iMinPos; iPos--) {
+  // from the end on
+  for (SLONG slPos=slTail-slEODSize; slPos>=0; slPos--) {
+    CZipFields zf(zdb.zdb_pubTail+slPos, slTail-slPos);
     // read signature
-    fseek(f, iPos, SEEK_SET);
     SLONG slSig;
-    size_t _size = fread(&slSig, sizeof(slSig), 1, f);
-    BYTESWAP(slSig);
+    READ_ZIPFIELD(zf, slSig);
     // if this is the sig
     if (slSig==SIGNATURE_EOD) {
       // read directory end
-      READ_ZIPFIELD(f, eod.eod_swDiskNo);
-      READ_ZIPFIELD(f, eod.eod_swDirStartDiskNo);
-      READ_ZIPFIELD(f, eod.eod_swEntriesInDirOnThisDisk);
-      READ_ZIPFIELD(f, eod.eod_swEntriesInDir);
-      READ_ZIPFIELD(f, eod.eod_slSizeOfDir);
-      READ_ZIPFIELD(f, eod.eod_slDirOffsetInFile);
-      READ_ZIPFIELD(f, eod.eod_swCommentLength);
+      READ_ZIPFIELD(zf, eod.eod_swDiskNo);
+      READ_ZIPFIELD(zf, eod.eod_swDirStartDiskNo);
+      READ_ZIPFIELD(zf, eod.eod_swEntriesInDirOnThisDisk);
+      READ_ZIPFIELD(zf, eod.eod_swEntriesInDir);
+      READ_ZIPFIELD(zf, eod.eod_slSizeOfDir);
+      READ_ZIPFIELD(zf, eod.eod_slDirOffsetInFile);
+      READ_ZIPFIELD(zf, eod.eod_swCommentLength);
 
       // if multi-volume zip
       if (eod.eod_swDiskNo!=0||eod.eod_swDirStartDiskNo!=0
@@ -291,16 +409,26 @@ void ReadZIPDirectory_t(CTFileName *pfnmZip)
   BOOL bMod = 
     pfnmZip->HasPrefix(_fnmApplicationPath+"Mods/") || 
     pfnmZip->HasPrefix(_fnmCDPath+"Mods/");
+  // or from the CD path
+  BOOL bCD = _fnmCDPath!="" && pfnmZip->HasPrefix(_fnmCDPath);
 
-  // go to the beginning of the central dir
-  fseek(f, eod.eod_slDirOffsetInFile, SEEK_SET);
+  // read the central dir at once
+  if (eod.eod_slSizeOfDir<=0 || eod.eod_slDirOffsetInFile<0
+   || eod.eod_slDirOffsetInFile>slFileSize-eod.eod_slSizeOfDir) {
+    ThrowF_t(TRANS("%s: Error reading central directory"), (const char *) (CTString&)*pfnmZip);
+  }
+  zdb.zdb_pubDir = (UBYTE*)AllocMemory(eod.eod_slSizeOfDir);
+  if (ar.ReadAt(eod.eod_slDirOffsetInFile, zdb.zdb_pubDir, eod.eod_slSizeOfDir)!=eod.eod_slSizeOfDir) {
+    ThrowF_t(TRANS("%s: Error reading central directory"), (const char *) (CTString&)*pfnmZip);
+  }
+  CZipFields zf(zdb.zdb_pubDir, eod.eod_slSizeOfDir);
+
   INDEX ctFiles = 0;
   // for each file
   for (INDEX iFile=0; iFile<eod.eod_swEntriesInDir; iFile++) {
     // read the sig
     SLONG slSig;
-    size_t _size = fread(&slSig, sizeof(slSig), 1, f);
-    BYTESWAP(slSig);
+    READ_ZIPFIELD(zf, slSig);
 
     // if this is not the expected sig
     if (slSig!=SIGNATURE_FH) {
@@ -310,22 +438,22 @@ void ReadZIPDirectory_t(CTFileName *pfnmZip)
     }
     // read its header
     FileHeader fh;
-    READ_ZIPFIELD(f, fh.fh_swVersionMadeBy);
-    READ_ZIPFIELD(f, fh.fh_swVersionToExtract);
-    READ_ZIPFIELD(f, fh.fh_swGPBFlag);
-    READ_ZIPFIELD(f, fh.fh_swCompressionMethod);
-    READ_ZIPFIELD(f, fh.fh_swModFileTime);
-    READ_ZIPFIELD(f, fh.fh_swModFileDate);
-    READ_ZIPFIELD(f, fh.fh_slCRC32);
-    READ_ZIPFIELD(f, fh.fh_slCompressedSize);
-    READ_ZIPFIELD(f, fh.fh_slUncompressedSize);
-    READ_ZIPFIELD(f, fh.fh_swFileNameLen);
-    READ_ZIPFIELD(f, fh.fh_swExtraFieldLen);
-    READ_ZIPFIELD(f, fh.fh_swFileCommentLen);
-    READ_ZIPFIELD(f, fh.fh_swDiskNoStart);
-    READ_ZIPFIELD(f, fh.fh_swInternalFileAttributes);
-    READ_ZIPFIELD(f, fh.fh_swExternalFileAttributes);
-    READ_ZIPFIELD(f, fh.fh_slLocalHeaderOffset);
+    READ_ZIPFIELD(zf, fh.fh_swVersionMadeBy);
+    READ_ZIPFIELD(zf, fh.fh_swVersionToExtract);
+    READ_ZIPFIELD(zf, fh.fh_swGPBFlag);
+    READ_ZIPFIELD(zf, fh.fh_swCompressionMethod);
+    READ_ZIPFIELD(zf, fh.fh_swModFileTime);
+    READ_ZIPFIELD(zf, fh.fh_swModFileDate);
+    READ_ZIPFIELD(zf, fh.fh_slCRC32);
+    READ_ZIPFIELD(zf, fh.fh_slCompressedSize);
+    READ_ZIPFIELD(zf, fh.fh_slUncompressedSize);
+    READ_ZIPFIELD(zf, fh.fh_swFileNameLen);
+    READ_ZIPFIELD(zf, fh.fh_swExtraFieldLen);
+    READ_ZIPFIELD(zf, fh.fh_swFileCommentLen);
+    READ_ZIPFIELD(zf, fh.fh_swDiskNoStart);
+    READ_ZIPFIELD(zf, fh.fh_swInternalFileAttributes);
+    READ_ZIPFIELD(zf, fh.fh_swExternalFileAttributes);
+    READ_ZIPFIELD(zf, fh.fh_slLocalHeaderOffset);
 
     // read the filename
     const SLONG slMaxFileName = 512;
@@ -337,11 +465,14 @@ void ReadZIPDirectory_t(CTFileName *pfnmZip)
     if (fh.fh_swFileNameLen<=0) {
       ThrowF_t(TRANS("%s: Invalid filepath length in zip"), (const char *) (CTString&)*pfnmZip);
     }
-    _size = fread(strBuffer, fh.fh_swFileNameLen, 1, f);
+    zf.ReadBytes(strBuffer, fh.fh_swFileNameLen);
 
     // skip eventual comment and extra fields
-    if (fh.fh_swFileCommentLen+fh.fh_swExtraFieldLen>0) {
-      fseek(f, fh.fh_swFileCommentLen+fh.fh_swExtraFieldLen, SEEK_CUR);
+    zf.Skip(fh.fh_swFileCommentLen+fh.fh_swExtraFieldLen);
+
+    // if the directory ended early
+    if (zf.zf_bOverrun) {
+      ThrowF_t(TRANS("%s: Error reading central directory"), (const char *) (CTString&)*pfnmZip);
     }
 
     // if the file is directory
@@ -368,6 +499,7 @@ void ReadZIPDirectory_t(CTFileName *pfnmZip)
       ze.ze_slDataOffset = fh.fh_slLocalHeaderOffset;
       ze.ze_ulCRC = fh.fh_slCRC32;
       ze.ze_bMod = bMod;
+      ze.ze_bCD = bCD;
       // check for compressopn
       if (fh.fh_swCompressionMethod==0) {
         ze.ze_bStored = TRUE;
@@ -379,12 +511,6 @@ void ReadZIPDirectory_t(CTFileName *pfnmZip)
           (const char *) ze.ze_fnm);
       }
     }
-  }
-
-  // if error reading
-  if (ferror(f)) {
-    // fail
-    ThrowF_t(TRANS("%s: Error reading central directory"), (const char *) (CTString&)*pfnmZip);
   }
 
   // report that file was read
@@ -544,6 +670,11 @@ BOOL UNZIPIsFileAtIndexMod(INDEX i)
   return _azeFiles[i].ze_bMod;
 }
 
+BOOL UNZIPIsFileAtIndexCD(INDEX i)
+{
+  return _azeFiles[i].ze_bCD;
+}
+
 // get index of a file (-1 for no file)
 INDEX UNZIPGetFileIndex(const CTFileName &fnm)
 {
@@ -627,45 +758,48 @@ INDEX UNZIPOpen_t(const CTFileName &fnm)
   zh.zh_zeEntry = *pze;
 
   // open zip archive for reading
-  zh.zh_fFile = fopen(*pze->ze_pfnmArchive, "rb");
+  zh.zh_parArchive = OpenArchiveReader(*pze->ze_pfnmArchive);
   // if failed to open it
-  if (zh.zh_fFile==NULL) {
+  if (zh.zh_parArchive==NULL) {
+    const CTString strError = strerror(errno);
     // clear the handle
     zh.Clear();
     // fail
     ThrowF_t(TRANS("Cannot open '%s': %s"), (const char *) (const CTString&)*pze->ze_pfnmArchive,
-      strerror(errno));
+      (const char *) strError);
   }
-  // seek to the local header of the entry
-  fseek(zh.zh_fFile, zh.zh_zeEntry.ze_slDataOffset, SEEK_SET);
+  // read the local header of the entry
+  UBYTE aubLFH[sizeof(SLONG)+sizeof(LocalFileHeader)];
+  const BOOL bLFHRead = zh.zh_parArchive->ReadAt(zh.zh_zeEntry.ze_slDataOffset, aubLFH, sizeof(aubLFH))==sizeof(aubLFH);
+  CZipFields zf(aubLFH, sizeof(aubLFH));
   // read the sig
   SLONG slSig;
-  size_t _size = fread(&slSig, sizeof(slSig), 1, zh.zh_fFile);
-  BYTESWAP(slSig);
+  READ_ZIPFIELD(zf, slSig);
   // if this is not the expected sig
-  if (slSig!=SIGNATURE_LFH) {
+  if (!bLFHRead || slSig!=SIGNATURE_LFH) {
+    const CTFileName fnmArchive = *zh.zh_zeEntry.ze_pfnmArchive;
+    const CTFileName fnmEntry = zh.zh_zeEntry.ze_fnm;
+    zh.Clear();
     // fail
     ThrowF_t(TRANS("%s/%s: Wrong signature for 'local file header'"), 
-      (const char *) (CTString&)*zh.zh_zeEntry.ze_pfnmArchive, (const char *) zh.zh_zeEntry.ze_fnm);
+      (const char *) (CTString&)fnmArchive, (const char *) fnmEntry);
   }
   // read the header
   LocalFileHeader lfh;
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_swVersionToExtract);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_swGPBFlag);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_swCompressionMethod);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_swModFileTime);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_swModFileDate);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_slCRC32);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_slCompressedSize);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_slUncompressedSize);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_swFileNameLen);
-  READ_ZIPFIELD(zh.zh_fFile, lfh.lfh_swExtraFieldLen);
+  READ_ZIPFIELD(zf, lfh.lfh_swVersionToExtract);
+  READ_ZIPFIELD(zf, lfh.lfh_swGPBFlag);
+  READ_ZIPFIELD(zf, lfh.lfh_swCompressionMethod);
+  READ_ZIPFIELD(zf, lfh.lfh_swModFileTime);
+  READ_ZIPFIELD(zf, lfh.lfh_swModFileDate);
+  READ_ZIPFIELD(zf, lfh.lfh_slCRC32);
+  READ_ZIPFIELD(zf, lfh.lfh_slCompressedSize);
+  READ_ZIPFIELD(zf, lfh.lfh_slUncompressedSize);
+  READ_ZIPFIELD(zf, lfh.lfh_swFileNameLen);
+  READ_ZIPFIELD(zf, lfh.lfh_swExtraFieldLen);
 
   // determine exact compressed data position
-  zh.zh_zeEntry.ze_slDataOffset = 
-    ftell(zh.zh_fFile)+lfh.lfh_swFileNameLen+lfh.lfh_swExtraFieldLen;
-  // seek there
-  fseek(zh.zh_fFile, zh.zh_zeEntry.ze_slDataOffset, SEEK_SET);
+  zh.zh_zeEntry.ze_slDataOffset += sizeof(aubLFH)+lfh.lfh_swFileNameLen+lfh.lfh_swExtraFieldLen;
+  zh.zh_slReadPos = 0;
 
   // allocate buffers
   zh.zh_pubBufIn  = (UBYTE*)AllocMemory(BUF_SIZE);
@@ -684,8 +818,8 @@ INDEX UNZIPOpen_t(const CTFileName &fnm)
     // clean up what is possible
     FreeMemory(zh.zh_pubBufIn );
     zh.zh_pubBufIn  = NULL;
-    fclose(zh.zh_fFile);
-    zh.zh_fFile = NULL;
+    delete zh.zh_parArchive;
+    zh.zh_parArchive = NULL;
     // throw error
     zh.ThrowZLIBError_t(err, TRANS("Cannot init inflation"));
   }
@@ -733,6 +867,25 @@ ULONG UNZIPGetCRC(INDEX iHandle)
   return zh.zh_zeEntry.ze_ulCRC;
 }
 
+// give zlib more of an entry's compressed data (FALSE at its end, or if it can't be read)
+static BOOL FillZipInput(CZipHandle &zh)
+{
+  const SLONG slLeft = zh.zh_zeEntry.ze_slCompressedSize-zh.zh_slReadPos;
+  if (slLeft<=0) {
+    return FALSE;
+  }
+  const SLONG slRead = zh.zh_parArchive->ReadAt(zh.zh_zeEntry.ze_slDataOffset+zh.zh_slReadPos,
+    zh.zh_pubBufIn, Min(slLeft, SLONG(BUF_SIZE)));
+  if (slRead<=0) {
+    return FALSE;
+  }
+  zh.zh_slReadPos += slRead;
+  // tell zlib that there is more to read
+  zh.zh_zstream.next_in = zh.zh_pubBufIn;
+  zh.zh_zstream.avail_in = slRead;
+  return TRUE;
+}
+
 // read a block from zip file
 void UNZIPReadBlock_t(INDEX iHandle, UBYTE *pub, SLONG slStart, SLONG slLen)
 {
@@ -761,8 +914,7 @@ void UNZIPReadBlock_t(INDEX iHandle, UBYTE *pub, SLONG slStart, SLONG slLen)
   // if not compressed
   if (zh.zh_zeEntry.ze_bStored) {
     // just read from file
-    fseek(zh.zh_fFile, zh.zh_zeEntry.ze_slDataOffset+slStart, SEEK_SET);
-    size_t _size = fread(pub, 1, slLen, zh.zh_fFile);
+    zh.zh_parArchive->ReadAt(zh.zh_zeEntry.ze_slDataOffset+slStart, pub, slLen);
     return;
   }
 
@@ -774,22 +926,16 @@ void UNZIPReadBlock_t(INDEX iHandle, UBYTE *pub, SLONG slStart, SLONG slLen)
     inflateReset(&zh.zh_zstream);
     zh.zh_zstream.avail_in = 0;
     zh.zh_zstream.next_in = NULL;
-    // seek to start of zip entry data inside archive
-    fseek(zh.zh_fFile, zh.zh_zeEntry.ze_slDataOffset, SEEK_SET);
+    // read from the start of zip entry data inside archive
+    zh.zh_slReadPos = 0;
   }
 
   // while ahead of the current pointer
   while (static_cast<ULONG>(slStart) > zh.zh_zstream.total_out) {
-    // if zlib has no more input
-    while(zh.zh_zstream.avail_in==0) {
-      // read more to it
-      SLONG slRead = fread(zh.zh_pubBufIn, 1, BUF_SIZE, zh.zh_fFile);
-      if (slRead<=0) {
-        return; // !!!!
-      }
-      // tell zlib that there is more to read
-      zh.zh_zstream.next_in = zh.zh_pubBufIn;
-      zh.zh_zstream.avail_in  = slRead;
+    // if zlib has no more input, read more to it (after the end of the entry's data, it may
+    // still have output)
+    if (zh.zh_zstream.avail_in==0) {
+      FillZipInput(zh);
     }
     // read dummy data from the output
     #define DUMMY_SIZE 256
@@ -798,7 +944,11 @@ void UNZIPReadBlock_t(INDEX iHandle, UBYTE *pub, SLONG slStart, SLONG slLen)
     zh.zh_zstream.avail_out = Min(SLONG(slStart-zh.zh_zstream.total_out), SLONG(DUMMY_SIZE));
     zh.zh_zstream.next_out = aubDummy;
     int ierr = inflate(&zh.zh_zstream, Z_SYNC_FLUSH);
-    if (ierr!=Z_OK && ierr!=Z_STREAM_END) {
+    // (the end of the data, or no more of it could be read)
+    if (ierr==Z_STREAM_END || ierr==Z_BUF_ERROR) {
+      break;
+    }
+    if (ierr!=Z_OK) {
       zh.ThrowZLIBError_t(ierr, TRANS("Error seeking in zip"));
     }
   }
@@ -818,20 +968,18 @@ void UNZIPReadBlock_t(INDEX iHandle, UBYTE *pub, SLONG slStart, SLONG slLen)
 
   // while there is something to write to given block
   while (zh.zh_zstream.avail_out>0) {
-    // if zlib has no more input
-    while(zh.zh_zstream.avail_in==0) {
-      // read more to it
-      SLONG slRead = fread(zh.zh_pubBufIn, 1, BUF_SIZE, zh.zh_fFile);
-      if (slRead<=0) {
-        return; // !!!!
-      }
-      // tell zlib that there is more to read
-      zh.zh_zstream.next_in = zh.zh_pubBufIn;
-      zh.zh_zstream.avail_in  = slRead;
+    // if zlib has no more input, read more to it (after the end of the entry's data, it may
+    // still have output)
+    if (zh.zh_zstream.avail_in==0) {
+      FillZipInput(zh);
     }
     // decode to output
     int ierr = inflate(&zh.zh_zstream, Z_SYNC_FLUSH);
-    if (ierr!=Z_OK && ierr!=Z_STREAM_END) {
+    // (the end of the data, or no more of it could be read)
+    if (ierr==Z_STREAM_END || ierr==Z_BUF_ERROR) {
+      return;
+    }
+    if (ierr!=Z_OK) {
       zh.ThrowZLIBError_t(ierr, TRANS("Error reading from zip"));
     }
   }

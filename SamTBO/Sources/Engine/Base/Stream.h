@@ -377,6 +377,8 @@ ENGINE_API BOOL RemoveFile(const CTFileName &fnmFile);
 #define EFP_BASEZIP    2  // file in one of base zips
 #define EFP_MODZIP     3  // file in one of mod zips
 ENGINE_API INDEX ExpandFilePath(ULONG ulType, const CTFileName &fnmFile, CTFileName &fnmExpanded);
+// check if a file is read from the CD path (The First Encounter's files), loose or in an archive
+ENGINE_API BOOL IsFileFromCDPath(const CTFileName &fnmFile);
 
 // these are input flags for directory reading
 #define DLI_RECURSIVE  (1UL<<0)  // recurse into subdirs

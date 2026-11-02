@@ -117,7 +117,17 @@ void ParseCommandLine(CTString strCmd)
         _fnmMod = "Mods\\"+strMod+"\\";
       }
     } else if (strWord=="+cdpath") {
+      // (The First Encounter's folder; file names are appended to it)
       _fnmCDPath = GetNextParam();
+      const char *strCDPath = _fnmCDPath;
+      const size_t ctCDPath = strlen(strCDPath);
+      if (ctCDPath>0 && strCDPath[ctCDPath-1]!='/' && strCDPath[ctCDPath-1]!='\\') {
+#ifdef PLATFORM_WIN32
+        _fnmCDPath += "\\";
+#else
+        _fnmCDPath += "/";
+#endif
+      }
 #ifdef PLATFORM_UNIX
     } else if (strWord=="+portable") {
       _bPortableVersion = TRUE; // portable version (all user files stored in game dir)
