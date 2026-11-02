@@ -1,6 +1,6 @@
 // The Both Encounters with the two games' demos (web/build.sh fetches them): "Play the demos"
 // downloads The First Encounter's (the site's, shared with its page) and The Second Encounter's,
-// New Game starts the Karnak demo level, "please giveall" gives the weapons the demos have files
+// both demo levels can be chosen in Custom Level, New Game starts the Karnak demo level, "please giveall" gives the weapons the demos have files
 // for, and at Karnak's end (started with dbg_bFirstEncounterEnd) the Palenque demo level follows.
 // Screenshots in web/build/tbo-demos-*.png.
 //
@@ -39,13 +39,26 @@ results['the game knows it has the demos'] = await waitLog(page, /Demo data dete
 await page.waitForTimeout(2000);
 await shot(page, 'menu');
 
-// New Game: Single Player, New Game, the difficulty
+// the levels to choose from: Single Player, Custom Level
 // (the pointer over Single Player: WebKit tells the game where it is, over the item under the
 // Start button otherwise, which Enter would choose)
 await page.mouse.move(512, 175);
 await page.waitForTimeout(500);
-for (let i = 0; i < 3; i++) {
-  await page.keyboard.press('Enter');
+for (const key of ['Enter', 'ArrowDown', 'Enter']) {
+  await page.keyboard.press(key);
+  await page.waitForTimeout(1500);
+}
+await shot(page, 'levels');
+// (all single player levels are listed, also those not played yet: both demos')
+const singlePlayer = (await page.evaluate(() => window.engineLog))
+  .map((l) => /file '(.*)' : '.*' spawn=0x([0-9a-f]+)/.exec(l)).filter((m) => m && (parseInt(m[2], 16) & 0x10000))
+  .map((m) => m[1]);
+results[`both demos' levels can be chosen (${singlePlayer.join(', ')})`] = ['KarnakDemo.wld', 'Palenque_Demo.wld']
+  .every((name) => singlePlayer.some((level) => level.endsWith(name)));
+
+// New Game: back to Single Player (New Game chosen again), New Game, the difficulty
+for (const key of ['Escape', 'Enter', 'Enter']) {
+  await page.keyboard.press(key);
   await page.waitForTimeout(1500);
 }
 results['New Game starts the Karnak demo'] = await waitLog(page, /Starting session: 'Levels\\KarnakDemo\.wld'/)

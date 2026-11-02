@@ -24,8 +24,6 @@ CListHead _lhAutoDemos;
 CListHead _lhAllLevels;
 CListHead _lhFilteredLevels;
 extern INDEX sam_bShowAllLevels;
-extern CTString sam_strFirstLevel;
-extern CTString sam_strTrainingLevel;
 
 
 CLevelInfo::CLevelInfo(void)
@@ -163,17 +161,9 @@ void FilterLevels(ULONG ulSpawnFlags)
       bVisible = TRUE;
     // if it satisfies the spawn flags
     } else if (li.li_ulSpawnFlags&ulSpawnFlags) {
-      // if spawn flags include single player
-      if (ulSpawnFlags&SPF_SINGLEPLAYER) {
-        // visibile only if visited already, except the levels a game starts on
-        // (CTFileName: with this platform's directory separators, as li_fnLevel)
-        bVisible = li.li_fnLevel==CTFileName(sam_strFirstLevel) || li.li_fnLevel==CTFileName(sam_strTrainingLevel)
-                || FileExists(li.li_fnLevel.NoExt()+".vis");
-      // if not single player
-      } else {
-        // it is visibile
-        bVisible = TRUE;
-      }
+      // it is visible (in The Both Encounters, single player levels too, also those not
+      // visited yet: e.g. both demos' levels)
+      bVisible = TRUE;
     }
 
     // if visible
