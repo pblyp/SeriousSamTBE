@@ -20,14 +20,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SE_COL_ORANGE_NEUTRAL   0xee9c0000
 #define SE_COL_ORANGE_DARK      0x9b4b0000
 #define SE_COL_ORANGE_DARK_LT   0xbc6a0000
-// (The Both Encounters: The Second Encounter's blue interface is purple, at the same
-// brightness: The First Encounter's is green, The Second Encounter's blue)
-#define SE_COL_BLUE_DARK_HV     0x1d152300
-#define SE_COL_BLUE_DARK        0x3a2a4600
-#define SE_COL_BLUE_DARK_LT     0x5d436f00
-#define SE_COL_BLUE_NEUTRAL     0x805c9900
-#define SE_COL_BLUE_NEUTRAL_LT  0x9f60cc00
-#define SE_COL_BLUE_LIGHT       0xbe64ff00
+// (The Both Encounters: The Second Encounter's blue interface is gray, at the same
+// lightness: The First Encounter's is green, The Second Encounter's blue)
+#define SE_COL_BLUE_DARK_HV     0x1c1c1c00
+#define SE_COL_BLUE_DARK        0x38383800
+#define SE_COL_BLUE_DARK_LT     0x59595900
+#define SE_COL_BLUE_NEUTRAL     0x7a7a7a00
+#define SE_COL_BLUE_NEUTRAL_LT  0x96969600
+#define SE_COL_BLUE_LIGHT       0xb2b2b200
 #define SE_COL_BLUEGREEN_LT     0x6cff6c00
 
 #define SE_COL_GREEN_DARK        0x00330000

@@ -3351,6 +3351,30 @@ static CTextureObject _toBcgClouds;
 static CTextureObject _toBcgGrid;
 #ifndef FIRST_ENCOUNTER
 static CTextureObject _toBackdrop;
+// the menus' backdrop picture is blue: it is drawn gray, as The Both Encounters' interface is
+// (see SEColors.h), with a tint that takes out its average color's hue (found when it is loaded:
+// the engine loads textures again from their files, e.g. when the display mode changes)
+static COLOR _colBackdrop = C_WHITE;
+static void FindGrayTint(CTextureData *ptd)
+{
+  const UBYTE *pub = (const UBYTE *)ptd->td_pulFrames;
+  if (pub==NULL) {
+    return;
+  }
+  // (its largest mip-map)
+  const PIX ctPixels = ptd->GetPixWidth()*ptd->GetPixHeight();
+  DOUBLE dR = 0, dG = 0, dB = 0;
+  for (PIX i=0; i<ctPixels; i++) {
+    dR += pub[i*4+0];
+    dG += pub[i*4+1];
+    dB += pub[i*4+2];
+  }
+  const DOUBLE dMin = Min(dR, Min(dG, dB));
+  if (dMin<=0) {
+    return;
+  }
+  _colBackdrop = RGBToColor(UBYTE(255*dMin/dR), UBYTE(255*dMin/dG), UBYTE(255*dMin/dB));
+}
 static CTextureObject _toSamU;
 static CTextureObject _toSamD;
 static CTextureObject _toLeftU;
@@ -3386,6 +3410,9 @@ void CGame::LCDInit(void)
     _toPointer.SetData_t(CTFILENAME("TexturesMP\\General\\Pointer.tex"));
     _toBcgGrid.SetData_t(CTFILENAME("TexturesMP\\General\\grid.tex"));
     _toBackdrop.SetData_t(CTFILENAME("TexturesMP\\General\\MenuBack.tex"));
+    // (with its pixels kept: they are freed once a texture is uploaded)
+    ((CTextureData*)_toBackdrop.GetData())->Force(TEX_STATIC);
+    FindGrayTint((CTextureData*)_toBackdrop.GetData());
     // thoses are not in original TFE datas and must be added externaly (with SE1_10.gro or a minimal versio of it)
     _toSamU.SetData_t(CTFILENAME("TexturesMP\\General\\SamU.tex"));
     _toSamD.SetData_t(CTFILENAME("TexturesMP\\General\\SamD.tex"));
@@ -3482,8 +3509,7 @@ void CGame::LCDRenderClouds1(void)
   LCDRenderCloudsForComp();
   LCDRenderCompGrid();
   #else
-  // (tinted purple, as The Both Encounters' interface is, see SEColors.h)
-  _pdp_SE->PutTexture(&_toBackdrop, _boxScreen_SE, LerpColor(C_WHITE, SE_COL_BLUE_LIGHT, 0.4f)|255);
+  _pdp_SE->PutTexture(&_toBackdrop, _boxScreen_SE, _colBackdrop|255);
 
   if (!_bPopup) {
 
