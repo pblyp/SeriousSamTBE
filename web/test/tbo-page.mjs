@@ -228,6 +228,10 @@ results['one .zip with both folders is taken'] = await page2.evaluate(() => {
   return exists('/data/SE1_00.gro') && exists('/tfe/1_00c.gro');
 });
 
+// network games: the page finds the hub of the server it comes from (its net-hub.json is in tbo/)
+results['network games go through the page\'s server'] = await page2.evaluate(() =>
+  fetch('net-hub.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).then(({ hub }) => hub === '/hub', () => false));
+
 // The First Encounter's service worker doesn't keep The Both Encounters' files
 const tfeCached = await tfePage.evaluate(async () => {
   const cache = await caches.open('sam-app');

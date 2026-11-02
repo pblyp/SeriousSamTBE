@@ -1,7 +1,7 @@
 // Minimal static file server for web/build/dist.
 //
 // It also runs network games, for players who open the page from it (announced in
-// /net-hub.json):
+// net-hub.json, in every folder: a version's page in tbo/ asks there):
 //   /hub     passes the game's packets on between the players of a room (see shell/netplay.js)
 
 import http from 'node:http';
@@ -79,7 +79,7 @@ export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false 
       res.writeHead(204, corsHeaders).end();
       return;
     }
-    if (urlPath === '/net-hub.json' && hub) {
+    if (urlPath.endsWith('/net-hub.json') && hub) {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' })
         .end(JSON.stringify({ hub: HUB_PATH }));
       return;
