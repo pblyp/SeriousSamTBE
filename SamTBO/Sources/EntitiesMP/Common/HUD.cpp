@@ -807,7 +807,7 @@ extern void DrawHUD( const CPlayer *penPlayerCurrent, CDrawPort *pdpCurrent, BOO
   _fCustomScalingAdjustment = 1.0f;
   _fResolutionScaling = (FLOAT)_pixDPWidth /640.0f;
   _fResolutionScalingY = (FLOAT)_pixDPHeight /480.0f;
-  _colHUD     = 0x4C80BB00;
+  _colHUD     = 0x8D4CBB00;  // (purple in The Both Encounters, The Second Encounter's was blue)
   _colHUDText = SE_COL_ORANGE_LIGHT;
   _ulAlphaHUD = NormFloatToByte(hud_fOpacity);
   _tmNow = _pTimer->CurrentTick();
@@ -1138,7 +1138,7 @@ extern void DrawHUD( const CPlayer *penPlayerCurrent, CDrawPort *pdpCurrent, BOO
          || !_awiWeapons[i].wi_bHasWeapon) continue;
       // display weapon icon
       COLOR colBorder = _colHUD;
-      colIcon = 0xccddff00;
+      colIcon = 0xeaccff00;
       // weapon that is currently selected has different colors
       if( ptoWantedWeapon == _awiWeapons[i].wi_ptoWeapon) {
         colIcon = 0xffcc0000;
@@ -1147,7 +1147,7 @@ extern void DrawHUD( const CPlayer *penPlayerCurrent, CDrawPort *pdpCurrent, BOO
       // no ammo
       if( _awiWeapons[i].wi_paiAmmo!=NULL && _awiWeapons[i].wi_paiAmmo->ai_iAmmoAmmount==0) {
         _fCustomScalingAdjustment = 0.9f; //#### 0.7f - 1.0f
-        HUD_DrawBorder( fCol, fRow, fOneUnit, fOneUnit, 0x22334400);
+        HUD_DrawBorder( fCol, fRow, fOneUnit, fOneUnit, 0x36224400);
         if (hud_bLegacyHUD) {
           _fCustomScalingAdjustment = 1.0f;
         } else if (hud_bWeaponsIconScale) {
@@ -1156,7 +1156,7 @@ extern void DrawHUD( const CPlayer *penPlayerCurrent, CDrawPort *pdpCurrent, BOO
           _fCustomScalingAdjustment = 0.5f;
         }
 
-        HUD_DrawIcon(   fCol, fRow, *_awiWeapons[i].wi_ptoWeapon, 0x22334400, 1.0f, FALSE);
+        HUD_DrawIcon(   fCol, fRow, *_awiWeapons[i].wi_ptoWeapon, 0x36224400, 1.0f, FALSE);
       // yes ammo
       } else {
         _fCustomScalingAdjustment = 1.0f; //#### 0.7f - 1.0f

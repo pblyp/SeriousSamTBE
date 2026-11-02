@@ -3482,7 +3482,8 @@ void CGame::LCDRenderClouds1(void)
   LCDRenderCloudsForComp();
   LCDRenderCompGrid();
   #else
-  _pdp_SE->PutTexture(&_toBackdrop, _boxScreen_SE, C_WHITE|255);
+  // (tinted purple, as The Both Encounters' interface is, see SEColors.h)
+  _pdp_SE->PutTexture(&_toBackdrop, _boxScreen_SE, LerpColor(C_WHITE, SE_COL_BLUE_LIGHT, 0.4f)|255);
 
   if (!_bPopup) {
 
