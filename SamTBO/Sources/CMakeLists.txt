@@ -1337,6 +1337,7 @@ if(EMSCRIPTEN)
         Engine/Base/Emscripten/StaticDynamicLoader.cpp
         Engine/Base/Emscripten/WebPlatform.cpp
         Engine/Base/Emscripten/WebNet.cpp
+        Engine/Base/Emscripten/WebArchive.cpp
         "${CMAKE_CURRENT_BINARY_DIR}/StaticSymbols.cpp"
     )
 endif()
@@ -1408,7 +1409,7 @@ if(EMSCRIPTEN)
         -sFORCE_FILESYSTEM=1
         -sINVOKE_RUN=0
         -sEXIT_RUNTIME=1
-        "-sEXPORTED_RUNTIME_METHODS=callMain,FS,IDBFS,HEAPU8,stringToNewUTF8"
+        "-sEXPORTED_RUNTIME_METHODS=callMain,FS,IDBFS,HEAPU8,stringToNewUTF8,UTF8ToString"
         -lidbfs.js
         # keep function names, so stack traces of crashes are readable
         --profiling-funcs
@@ -1420,6 +1421,18 @@ if(EMSCRIPTEN)
     endif()
     target_link_options(SeriousSam${TS} PRIVATE ${WEB_LINK_FLAGS})
     set_target_properties(SeriousSam${TS} PROPERTIES SUFFIX ".js")
+    # a test of reading the group files from the browser's storage (web/test/archive-reader.mjs)
+    add_executable(ArchiveReaderTest EXCLUDE_FROM_ALL Tests/ArchiveReaderTest.cpp
+        $<TARGET_OBJECTS:${ENGINELIB}>
+        $<TARGET_OBJECTS:${ENTITIESMPLIB}>
+        $<TARGET_OBJECTS:${GAMEMPLIB}>
+        $<TARGET_OBJECTS:${SHADERSLIB}>
+        $<TARGET_OBJECTS:amp11lib${TS}>
+    )
+    target_link_libraries(ArchiveReaderTest engine_safemath${TS})
+    add_dependencies(ArchiveReaderTest ParseEntities${TS})
+    target_link_options(ArchiveReaderTest PRIVATE ${WEB_LINK_FLAGS})
+    set_target_properties(ArchiveReaderTest PROPERTIES SUFFIX ".js" OUTPUT_NAME "archivereadertest")
 else()
     target_link_libraries(SeriousSam${TS} ${ENGINELIB})
 endif()

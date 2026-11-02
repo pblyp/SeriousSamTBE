@@ -6,7 +6,7 @@
     "smoke": "node smoke.mjs",
     "persistence": "node persistence.mjs",
     "ownfiles": "node ownfiles.mjs",
-    "test": "node smoke.mjs && node persistence.mjs && node ownfiles.mjs && node touch.mjs && node gamepad.mjs && node mobile.mjs && node torrent.mjs && node pwa.mjs && node netplay.mjs && node netplay-browsers.mjs && node tbo-page.mjs",
+    "test": "node smoke.mjs && node persistence.mjs && node ownfiles.mjs && node touch.mjs && node gamepad.mjs && node mobile.mjs && node torrent.mjs && node pwa.mjs && node netplay.mjs && node netplay-browsers.mjs && node tbo-page.mjs && node archive-reader.mjs",
     "touch": "node touch.mjs",
     "gamepad": "node gamepad.mjs",
     "mobile": "node mobile.mjs",
@@ -14,7 +14,9 @@
     "pwa": "node pwa.mjs",
     "netplay": "node netplay.mjs",
     "netplay-browsers": "node netplay-browsers.mjs",
-    "tbo-page": "node tbo-page.mjs"
+    "tbo-page": "node tbo-page.mjs",
+    "archive-reader": "node archive-reader.mjs",
+    "tbo-levels": "node tbo-levels.mjs"
   },
   "devDependencies": {
     "@trystero-p2p/ws-relay": "^0.25.4",

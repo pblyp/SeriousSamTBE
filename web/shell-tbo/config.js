@@ -8,6 +8,8 @@ self.GameConfig = {
   subtitle: 'The Both Encounters',
   engine: 'serioussamtbo',
   demo: false,
+  // (both installations are more than some phones let a page have in memory)
+  lazyArchives: true,
   // (told apart by their group files)
   installs: [
     { id: 'tse', name: 'The Second Encounter', root: '/data/', storePrefix: '', groups: /^se1_00/ },

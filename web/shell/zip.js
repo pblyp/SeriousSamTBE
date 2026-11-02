@@ -67,7 +67,8 @@
     }
   }
 
-  async function readEntry(file, entry) {
+  // an entry's data, as it is in the archive
+  async function entryData(file, entry) {
     // the file's data comes after its local header, whose name and extra field may
     // differ in length from the central directory's
     const header = await bytesAt(file, entry.localOffset, 30);
@@ -75,7 +76,17 @@
       throw new Error(`The .zip archive is damaged (at ${entry.path}).`);
     }
     const dataStart = entry.localOffset + 30 + header.getUint16(26, true) + header.getUint16(28, true);
-    const data = file.slice(dataStart, dataStart + entry.compressedSize);
+    return file.slice(dataStart, dataStart + entry.compressedSize);
+  }
+
+  // an entry's contents as a stream, for files too big to have in memory at once
+  async function streamEntry(file, entry) {
+    const data = await entryData(file, entry);
+    return entry.method === STORED ? data.stream() : data.stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  }
+
+  async function readEntry(file, entry) {
+    const data = await entryData(file, entry);
     if (entry.method === STORED) {
       return data.arrayBuffer();
     }
@@ -87,7 +98,7 @@
     return buffer;
   }
 
-  // the files in a .zip: [{ path, size, read() -> Promise<ArrayBuffer> }]
+  // the files in a .zip: [{ path, size, crc, read() -> Promise<ArrayBuffer>, stream() -> Promise<ReadableStream> }]
   async function list(file) {
     if (typeof DecompressionStream !== 'function') {
       throw new Error('This browser can\'t unpack .zip archives; please update it.');
@@ -113,6 +124,7 @@
         method: directory.getUint16(p + 10, true),
         compressedSize: directory.getUint32(p + 20, true),
         size: directory.getUint32(p + 24, true),
+        crc: directory.getUint32(p + 16, true),
         localOffset: directory.getUint32(p + 42, true),
       };
       applyZip64(entry, directory, p + 46 + nameLength, extraLength);
@@ -127,7 +139,7 @@
       if (entry.method !== STORED && entry.method !== DEFLATED) {
         throw new Error('The .zip archive uses a compression the page can\'t unpack; zip it with the usual (deflate) compression.');
       }
-      files.push({ path, size: entry.size, read: () => readEntry(file, entry) });
+      files.push({ path, size: entry.size, crc: entry.crc, read: () => readEntry(file, entry), stream: () => streamEntry(file, entry) });
     }
     return files;
   }

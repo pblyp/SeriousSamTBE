@@ -178,10 +178,13 @@
     open() {
       if (this.db) return Promise.resolve(this.db);
       return new Promise((resolve, reject) => {
-        const request = indexedDB.open(OWN_FILES_DB, 1);
+        // (with the version's group files in pieces, see archives.js)
+        const request = indexedDB.open(OWN_FILES_DB, Game.lazyArchives ? 2 : 1);
         request.onupgradeneeded = () => {
-          request.result.createObjectStore('files', { keyPath: 'path' });
-          request.result.createObjectStore('meta');
+          const db = request.result;
+          if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'path' });
+          if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
+          if (Game.lazyArchives && !db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
         };
         request.onsuccess = () => {
           this.db = request.result;
@@ -448,8 +451,9 @@
     return { path: key.slice(install.storePrefix.length), root: install.root, storePrefix: install.storePrefix };
   }
 
-  // a file of the player's: { path, size, read() -> Promise<ArrayBuffer>, file }
-  const fileEntry = (path, file) => ({ path, size: file.size, read: () => file.arrayBuffer(), file });
+  // a file of the player's: { path, size, read() -> Promise<ArrayBuffer>, stream(), file }
+  const fileEntry = (path, file) => ({ path, size: file.size, read: () => file.arrayBuffer(),
+    stream: async () => file.stream(), file });
 
   // read the files of a dropped folder (or the dropped .zip)
   async function entriesFromDrop(dataTransfer) {
@@ -493,6 +497,22 @@
     throw new Error(`${path} is damaged or incomplete.`);
   }
 
+  // the same, from its size and its last bytes (an archive that isn't read into memory)
+  function checkGroupTail(path, tail, size) {
+    const view = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+    const tailStart = size - tail.length;
+    for (let i = tail.length - 22; i >= 0; i--) {
+      if (view.getUint32(i, true) === 0x06054b50) {
+        const directoryEnd = view.getUint32(i + 16, true) + view.getUint32(i + 12, true);
+        if (directoryEnd <= tailStart + i) return;
+        break;
+      }
+    }
+    const error = new Error(`${path} is damaged or incomplete.`);
+    error.damaged = true;
+    throw error;
+  }
+
   // copy the game files into the game's file system (over the base files, if any)
   // (and keep the player's newly picked files in this browser, if it has room for them)
   async function writeDataFiles() {
@@ -513,11 +533,50 @@
         stopKeeping(e);
       }
     }
+    const progress = (bytes) => setStatus(`Preparing the game files… ${Math.round(100 * bytes / totalBytes)}%`,
+      bytes / totalBytes);
+    // (the version's group files are kept in pieces and read from there as the game needs them,
+    // see archives.js; as long as they can be kept in this browser)
+    const pieces = new Set();
+    const toMemory = async (file) => {
+      GameArchives.unregister(`${file.root || '/data/'}${file.path}`);
+      FS.writeFile(`${file.root || '/data/'}${file.path}`, new Uint8Array(await file.read()));
+      pieces.delete(file);
+    };
     for (const file of dataFiles) {
       const { path, size, read } = file;
-      setStatus(`Preparing the game files… ${Math.round(100 * doneBytes / totalBytes)}%`, doneBytes / totalBytes);
+      progress(doneBytes);
       const fullPath = `${file.root || '/data/'}${path}`;
       FS.mkdirTree(fullPath.slice(0, fullPath.lastIndexOf('/')));
+      // kept in pieces on an earlier visit: only the name is there (for the game to find it)
+      if (file.chunked) {
+        FS.writeFile(fullPath, new Uint8Array(0));
+        GameArchives.register(fullPath, OWN_FILES_DB, storeKey(file), size);
+        doneBytes += size;
+        continue;
+      }
+      if (Game.lazyArchives && keeping && file.stream && /\.gro$/i.test(path)) {
+        try {
+          const kept = await GameArchives.store(await OwnFiles.open(), storeKey(file), await file.stream(),
+            22 + 65535, (bytes) => progress(doneBytes + bytes));
+          if (kept.size !== size) {
+            const error = new Error(`${path} is damaged or incomplete.`);
+            error.damaged = true;
+            throw error;
+          }
+          checkGroupTail(path, kept.tail, size);
+          FS.writeFile(fullPath, new Uint8Array(0));
+          GameArchives.register(fullPath, OWN_FILES_DB, storeKey(file), size);
+          pieces.add(file);
+          doneBytes += size;
+          continue;
+        } catch (e) {
+          if (e.damaged) throw e;
+          // (not kept: those kept in pieces so far are read into memory after all)
+          stopKeeping(e);
+          for (const keptFile of [...pieces]) await toMemory(keptFile);
+        }
+      }
       const buffer = await read();
       if (/\.gro$/i.test(path)) {
         checkGroupFile(path, buffer);
@@ -528,13 +587,15 @@
           await OwnFiles.put(storeKey(file), buffer);
         } catch (e) {
           stopKeeping(e);
+          for (const keptFile of [...pieces]) await toMemory(keptFile);
         }
       }
       doneBytes += size;
     }
     log(`Copied ${dataFiles.length} game files (${Math.round(totalBytes / 1048576)} MB)`);
     if (keeping) {
-      ownFilesKept = { files: dataFiles.map((file) => ({ path: storeKey(file), size: file.size })), bytes: totalBytes };
+      ownFilesKept = { files: dataFiles.map((file) => ({ path: storeKey(file), size: file.size,
+        ...(pieces.has(file) ? { chunked: true } : {}) })), bytes: totalBytes };
     }
   }
 
@@ -733,6 +794,8 @@
 
   window.Module = {
     canvas,
+    // the group files read from the browser's storage (archives.js)
+    webArchives: window.GameArchives,
     netplay: createNetplay(),
     print: log,
     printErr: log,
@@ -880,7 +943,8 @@
       if (!meta) {
         throw new Error('The game files kept in this browser are gone. Pick the .zip again.');
       }
-      dataFiles = meta.files.map(({ path: key, size }) => ({ ...fromStoreKey(key), size, read: () => OwnFiles.read(key) }));
+      dataFiles = meta.files.map(({ path: key, size, chunked }) => ({ ...fromStoreKey(key), size, chunked,
+        read: () => OwnFiles.read(key) }));
       usingOwnFiles = true;
       ownFilesFromStore = true;
       await loadScript('base-data.js');

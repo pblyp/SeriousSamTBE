@@ -25,6 +25,8 @@ rendering with WebGL 2, playable in a web browser on computers and phones.
   It runs The Second Encounter's code, which also plays The First Encounter's levels: when
   they end, its credits roll and The Second Encounter's first level follows. Their
   deathmatch maps are there too (e.g. Desert Temple), with The Second Encounter's weapons.
+  The game files are read from the browser's storage as they are needed, so both games fit
+  on phones and tablets.
 
 It runs in current Chrome, Edge, Firefox and Safari (desktop, Android and iOS).
 

@@ -11,6 +11,9 @@ self.GameConfig = {
   engine: 'serioussam',
   // the demo can be played (see demo-download.js)
   demo: true,
+  // the player's group files are kept in pieces and read as the game needs them (archives.js),
+  // instead of being in memory
+  lazyArchives: false,
   // the installations the player's game files come from: where the page puts each one's files,
   // and the prefix of their names among the game files kept in this browser
   installs: [{ id: 'tfe', name: 'The First Encounter', root: '/data/', storePrefix: '' }],

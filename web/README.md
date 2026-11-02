@@ -66,11 +66,26 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   Encounter's is used; The First Encounter's levels, textures and music come from `/tfe`.
 - **The First Encounter's levels** are recognized by where they come from, and converted
   when loaded (their keys, weapons given at the start, lighting fixes, map).
+- **Group files read as they are needed.** Both installations are more than some phones let
+  a page have in memory, so TBO's page (`lazyArchives` in its config.js) doesn't put the
+  `.gro` files in the engine's file system: it streams each one from the .zip into
+  IndexedDB in 1 MB pieces (`shell/archives.js`), and leaves an empty file of that name for
+  the engine to find. The engine reads archives through one reader
+  (`Engine/Base/ArchiveReader.h`); in the web build, `Engine/Base/Emscripten/WebArchive.cpp`
+  copies what is in the page's cache of pieces (up to 96 MB, those read last) and otherwise
+  waits for the pieces from IndexedDB, yielding to the browser as it does every frame (JSPI or
+  Asyncify). Other files (scripts, loose levels) are in memory as before.
 - **Its own storage**, apart from The First Encounter's page on the same site: game files
   in `tbo-own-files`, settings and saved games in `/tbo-user`, the start page's options
   (`tbo.` prefix), its service worker and cache (`tbo-app`), and its network games
   (Trystero app id, room names).
-- **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations.
+- **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations;
+  `web/test/archive-reader.mjs` reads every file of the demo's group files from IndexedDB
+  through the engine's reader (a test program, `SamTBO/Sources/Tests/ArchiveReaderTest.cpp`)
+  with a small cache, in both builds. With real installations,
+  `TBO_TSE_ZIP=… TBO_TFE_ZIP=… node web/test/tbo-levels.mjs` starts each level of both games
+  and reports what the engine says about it, and lists the files both have with different
+  contents.
 
 ## How it works
 

@@ -273,8 +273,19 @@ public:
   }
 };
 
+#ifdef PLATFORM_EMSCRIPTEN
+// (the archives that the page keeps in the browser's storage are read from there)
+extern CArchiveReader *Web_OpenArchiveReader(const CTFileName &fnm);
+#endif
+
 CArchiveReader *OpenArchiveReader(const CTFileName &fnm)
 {
+#ifdef PLATFORM_EMSCRIPTEN
+  CArchiveReader *parWeb = Web_OpenArchiveReader(fnm);
+  if (parWeb!=NULL) {
+    return parWeb;
+  }
+#endif
   FILE *pFile = fopen(fnm, "rb");
   if (pFile==NULL) {
     return NULL;

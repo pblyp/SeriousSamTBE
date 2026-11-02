@@ -3,8 +3,10 @@
 // version's (names, no demo), takes the two installations as two .zip files picked one
 // after the other or as one .zip with both folders, says what is missing or wrong, puts each
 // installation's files where the engine looks for them (/data, The First Encounter's in
-// /tfe, passed as +cdpath), keeps them and the options apart from The First Encounter's
-// page, and that The First Encounter's service worker leaves /tbo/ alone.
+// /tfe, passed as +cdpath), keeps the group files in pieces in the browser's storage, from
+// where the engine reads them (also on the next visit), keeps them and the options apart
+// from The First Encounter's page, and that The First Encounter's service worker leaves
+// /tbo/ alone.
 //
 //   node tbo-page.mjs [--browser chromium|webkit|firefox]
 
@@ -103,7 +105,10 @@ await page.setInputFiles('#game-zip', tfeZip);
 await page.waitForSelector('#start:not([hidden])', { timeout: 120000 });
 const files = await page.evaluate(() => {
   const exists = (p) => { try { Module.FS.stat(p); return true; } catch (e) { return false; } };
+  // (the group files are only names: the engine reads them from the browser's storage)
+  const groups = ['/data/SE1_00.gro', '/data/SE1_00_Levels.gro', '/tfe/1_00c.gro', '/tfe/1_00_music.gro'];
   return {
+    inStorage: groups.every((p) => Module.FS.stat(p).size === 0 && GameArchives.open(p) >= 0),
     tse: exists('/data/SE1_00.gro') && exists('/data/SE1_00_Levels.gro'),
     tfe: exists('/tfe/1_00c.gro') && exists('/tfe/1_00_music.gro') && exists('/tfe/Levels/01_Hatshepsut.wld'),
     // (and the repository's files, from the base package)
@@ -113,22 +118,28 @@ const files = await page.evaluate(() => {
   };
 });
 results[`each installation's files are where the engine looks for them (${JSON.stringify(files)})`] =
-  files.tse && files.tfe && files.base && !files.notNeeded && !files.tfeNotInData;
+  files.tse && files.tfe && files.base && !files.notNeeded && !files.tfeNotInData && files.inStorage;
 
-// kept in the version's own store, The First Encounter's under tfe/
-const kept = await page.evaluate(async () => {
+// kept in the version's own store, The First Encounter's under tfe/: the group files in
+// pieces, the others whole
+const storedKeys = (p, store) => p.evaluate(async (store) => {
   const db = await new Promise((resolve, reject) => {
     const r = indexedDB.open('tbo-own-files');
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
   });
-  return new Promise((resolve) => {
-    const r = db.transaction('files').objectStore('files').getAllKeys();
-    r.onsuccess = () => resolve(r.result.sort());
+  const keys = await new Promise((resolve) => {
+    const r = db.transaction(store).objectStore(store).getAllKeys();
+    r.onsuccess = () => resolve(r.result.map((k) => (Array.isArray(k) ? k.join('#') : k)).sort());
   });
-});
-results[`the files are kept in the version's own store (${kept.join(', ')})`] =
-  kept.includes('SE1_00.gro') && kept.includes('tfe/1_00c.gro') && kept.includes('tfe/Levels/01_Hatshepsut.wld')
+  db.close();
+  return keys;
+}, store);
+const kept = await storedKeys(page, 'files');
+const pieces = await storedKeys(page, 'chunks');
+results[`the files are kept in the version's own store (${kept.join(', ')}; in pieces: ${pieces.join(', ')})`] =
+  kept.includes('tfe/Levels/01_Hatshepsut.wld') && !kept.some((k) => k.endsWith('.gro'))
+  && pieces.includes('SE1_00.gro#0') && pieces.includes('tfe/1_00c.gro#0')
   && !(await databases(page)).includes('sam-own-files');
 
 // the engine gets The First Encounter's folder, and reads both games' group files (it can't
@@ -143,6 +154,35 @@ results['the engine is started with +cdpath /tfe/ and reads both installations\'
   && log.some((l) => /\/data\/SE1_00\.gro: \d+ files/.test(l)) && log.some((l) => /\/tfe\/1_00c\.gro: \d+ files/.test(l));
 results['its settings and saved games are in its own storage (/tbo-user)'] =
   (await databases(page)).includes('/tbo-user') && !(await databases(page)).includes('/user');
+
+// the next visit (the files count as kept once the game has run with them; these made-up
+// ones can't, so that is done here): the group files are read from their pieces again
+await page.evaluate(async () => {
+  const db = await new Promise((resolve) => { const r = indexedDB.open('tbo-own-files'); r.onsuccess = () => resolve(r.result); });
+  const files = ['SE1_00.gro', 'SE1_00_Levels.gro', 'tfe/1_00c.gro', 'tfe/1_00_music.gro']
+    .map((path) => ({ path, size: GameArchives.size(GameArchives.open(`/${path.startsWith('tfe/') ? '' : 'data/'}${path}`)), chunked: true }))
+    .concat([{ path: 'tfe/Levels/01_Hatshepsut.wld', size: 13 }]);
+  await new Promise((resolve) => {
+    const tx = db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').put({ files, bytes: files.reduce((n, f) => n + f.size, 0), savedAt: Date.now() }, 'meta');
+    tx.oncomplete = resolve;
+  });
+  db.close();
+});
+const again = await context.newPage();
+again.on('pageerror', (e) => errors.push(e.stack || e.message));
+await again.goto(`${server.url}/tbo/index.html`);
+await again.waitForSelector('#play-own:not([hidden])', { timeout: 10000 });
+await again.click('#play-own');
+await again.waitForSelector('#start:not([hidden])', { timeout: 120000 });
+await again.click('#start');
+await again.waitForFunction(() => window.engineLog.some((l) => /\/tfe\/1_00c\.gro: \d+ files/.test(l)), null, { timeout: 60000 })
+  .catch(() => {});
+const againLog = await again.evaluate(() => window.engineLog);
+results['the next visit plays the kept files, the group files from their pieces'] =
+  againLog.some((l) => /\/data\/SE1_00\.gro: \d+ files/.test(l)) && againLog.some((l) => /\/tfe\/1_00c\.gro: \d+ files/.test(l))
+  && await again.evaluate(() => Module.FS.stat('/data/SE1_00.gro').size === 0 && Module.FS.stat('/tfe/Levels/01_Hatshepsut.wld').size === 13);
+await again.close();
 
 // one .zip with both folders
 const page2 = await context.newPage();

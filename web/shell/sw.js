@@ -20,7 +20,7 @@ const CACHE = Game.cache;
 // what the page needs to start, kept from the start: the first visit loads it before this
 // worker takes over (the rest is kept as it is used)
 const SHELL = [
-  './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js',
+  './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js', 'archives.js',
   'netplay.js', 'touch.js', 'gamepad.js', 'webtorrent.min.js', 'netplay-signal.js', 'base-data.js',
   ...(Game.demo ? ['demo-torrent.json', 'demo-page.torrent'] : []), 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-256.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
