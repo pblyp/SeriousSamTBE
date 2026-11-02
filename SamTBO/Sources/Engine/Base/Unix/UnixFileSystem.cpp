@@ -108,9 +108,10 @@ BOOL CFileSystem::IsDirectory(const char *fname)
 CUnixFileSystem::CUnixFileSystem(const char *argv0, const char *gamename)
 {
 #ifdef PLATFORM_EMSCRIPTEN
-    // the web page puts the game data in /data and mounts persistent storage at /user
+    // the web page puts the game data in /data (The First Encounter's in /tfe) and mounts
+    // persistent storage at /tbo-user (The First Encounter's version has /user)
     exePath = SDL_strdup("/data/Bin/");
-    userDir = SDL_strdup("/user/");
+    userDir = SDL_strdup("/tbo-user/");
 #else
     exePath = SDL_GetBasePath();
     userDir = SDL_GetPrefPath("Serious-Engine", gamename);

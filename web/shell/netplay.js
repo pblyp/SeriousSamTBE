@@ -20,7 +20,9 @@
 // WebNet.cpp calls open(), join(), send(), receive() and close()).
 
 (() => {
-  const APP_ID = 'serioussam-tfe-web';
+  // (each version of the game its own, see config.js: their players don't meet)
+  const APP_ID = self.GameConfig ? GameConfig.netAppId : 'serioussam-tfe-web';
+  const roomName = (code) => (self.GameConfig ? GameConfig.netRoomPrefix : '') + code;
   // room codes: no 0/O or 1/I, which are easily mixed up
   const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
   const CODE_LENGTH = 6;
@@ -225,7 +227,7 @@
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url);
       const bus = { onmessage: null, postMessage: (m) => socket.send(JSON.stringify({ ...m, data: encode(m.data) })), close: () => socket.close() };
-      socket.onopen = () => { socket.send(JSON.stringify({ room: code })); resolve(bus); };
+      socket.onopen = () => { socket.send(JSON.stringify({ room: roomName(code) })); resolve(bus); };
       socket.onerror = () => reject(new Error(`Cannot reach ${url}`));
       socket.onmessage = (e) => {
         const m = JSON.parse(e.data);
@@ -243,7 +245,7 @@
   // without WebRTC: browsers connected to a WebSocket hub (the page's server), or tabs of
   // the same browser (?net=local, a BroadcastChannel per room, for tests)
   async function localTransport(code, hubUrl, selfId = randomId()) {
-    const bus = hubUrl ? await hubBus(hubUrl, code) : new BroadcastChannel(`sam-net-${code}`);
+    const bus = hubUrl ? await hubBus(hubUrl, code) : new BroadcastChannel(`sam-net-${roomName(code)}`);
     const linkName = (peerId) => `${hubUrl ? 'hub' : 'local'}:${peerId}`;
     const events = transportEvents();
     const peers = new Map();

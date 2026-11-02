@@ -4,6 +4,9 @@ The engine compiled to WebAssembly with Emscripten, rendering with WebGL 2.
 It runs the official Karnak demo out of the box, and the full game when the
 player picks their own installation folder, zipped (the files never leave their device).
 
+The Both Encounters (`SamTBO`, at `/tbo/`) plays The First Encounter and The Second
+Encounter as one campaign, from the player's installations of both (see below).
+
 ## Building
 
 Requirements: [emsdk](https://emscripten.org/docs/getting_started/downloads.html)
@@ -14,6 +17,8 @@ Requirements: [emsdk](https://emscripten.org/docs/getting_started/downloads.html
 ```sh
 web/build.sh                       # Release build of both variants into web/build/dist
 web/build.sh RelWithDebInfo jspi   # one variant, with DWARF debug info
+web/build.sh Release all all       # The First Encounter, and The Both Encounters in dist/tbo
+web/build.sh Release all tbo       # only The Both Encounters
 ```
 
 The first build downloads the demo (`SeriousSamDemo.exe`) and the 1.05 patch
@@ -45,6 +50,27 @@ requests (the demo's files are the torrent's web seed).
 
 All files are well below Pages' 100 MB limit (the largest is the demo's 54 MB
 `1_00c_demo.gro`), and everything is loaded with relative URLs.
+
+## The Both Encounters
+
+`SamTBO` is a copy of `SamTSE` (The Second Encounter's code) with the web version's
+changes and what playing The First Encounter's levels takes; `web/build.sh … tbo` builds
+it into `dist/tbo/`, with the same page (`shell/`) and its own settings
+(`shell-tbo/config.js`, `shell-tbo/manifest.webmanifest`).
+
+- **Two installations.** The player picks a .zip of each game's folder (one after the
+  other, or both at once), or one .zip with both folders; the page tells them apart by
+  their group files (`SE1_00*.gro`, `1_00c*.gro`). The Second Encounter's files go to
+  `/data`, The First Encounter's to `/tfe`, which the engine gets as its second data folder
+  (`+cdpath /tfe/`): where both games have a file with the same name, The Second
+  Encounter's is used; The First Encounter's levels, textures and music come from `/tfe`.
+- **The First Encounter's levels** are recognized by where they come from, and converted
+  when loaded (their keys, weapons given at the start, lighting fixes, map).
+- **Its own storage**, apart from The First Encounter's page on the same site: game files
+  in `tbo-own-files`, settings and saved games in `/tbo-user`, the start page's options
+  (`tbo.` prefix), its service worker and cache (`tbo-app`), and its network games
+  (Trystero app id, room names).
+- **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations.
 
 ## How it works
 

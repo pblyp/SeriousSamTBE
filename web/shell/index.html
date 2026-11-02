@@ -31,7 +31,7 @@
         <button id="play-own" class="primary" type="button" hidden>Play my game files</button>
         <p class="note" id="play-own-note" hidden></p>
         <button id="play-demo" class="primary" type="button">Play the demo</button>
-        <p class="note">Karnak demo level &middot; about 80&nbsp;MB, downloaded once</p>
+        <p class="note" id="play-demo-note">Karnak demo level &middot; about 80&nbsp;MB, downloaded once</p>
         <label id="own-files" class="secondary" tabindex="0">
           Use my game files&hellip;
           <input id="game-zip" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
@@ -54,7 +54,7 @@
           (at most 1&nbsp;MB/s). Network games connect the players' browsers directly, so players can see each
           other's IP addresses.<span id="webrtc-insecure" hidden> WebRTC needs this page on https (or localhost):
           here, the demo comes from this site, and network games go through its server (if it can pass them on).</span></p>
-        <details class="about">
+        <details class="about" id="about-demo">
           <summary>About the demo</summary>
           <p>The game files downloaded here are only those of the official <em>Serious Sam: The First
             Encounter</em> demo (2001), which, to our knowledge, is freely redistributable. It is the same
@@ -93,6 +93,7 @@
   </div>
 </div>
 <pre id="log" hidden></pre>
+<script src="config.js"></script>
 <script src="fullscreen.js"></script>
 <script src="demo-download.js"></script>
 <script src="zip.js"></script>

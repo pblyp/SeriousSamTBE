@@ -17,7 +17,6 @@ set -euo pipefail
 WEB_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$WEB_DIR")"
 DEMO_DIR="$WEB_DIR/build/demo-data"
-BASE_DIR="$WEB_DIR/build/base-data"
 OUT_DIR="${1:-$WEB_DIR/build/dist}"
 SITE_URL="${2:-}"
 
@@ -29,19 +28,12 @@ if [ -z "${EMSDK:-}" ]; then
   echo "Activate emsdk first (source <emsdk>/emsdk_env.sh)" >&2
   exit 1
 fi
-FILE_PACKAGER="$EMSDK/upstream/emscripten/tools/file_packager.py"
 
 # the repository's files that the engine needs besides the original game data
-rm -rf "$BASE_DIR"
-mkdir -p "$BASE_DIR"
-rsync -a --exclude 'Sources' --exclude 'Bin' --exclude 'Tools.Win32' --exclude 'GameAgent' \
-  --exclude 'Mods' --exclude 'Demos' --exclude '*.desktop' --exclude 'serioussam.png' \
-  "$REPO_DIR/SamTFE/" "$BASE_DIR/"
+"$WEB_DIR/package_base.sh" "$OUT_DIR" SamTFE
 
 mkdir -p "$OUT_DIR"
 cd "$OUT_DIR"
-python3 "$FILE_PACKAGER" base-data.data --preload "$BASE_DIR@/data" \
-  --use-preload-cache --js-output=base-data.js
 
 # the demo's files as they are (each one is well below GitHub Pages' 100 MB limit),
 # without what the browser version doesn't use: the recorded demos and the intro

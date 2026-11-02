@@ -12,13 +12,17 @@
 // packages (*.data, kept by Emscripten in IndexedDB), lan-signal.json (what the page's
 // server offers right now), requests for parts of files, and other sites.
 
-const CACHE = 'sam-app';
+// what differs between the versions of the game sharing this page (see config.js): each
+// version's worker has its own cache
+importScripts('config.js');
+const Game = self.GameConfig;
+const CACHE = Game.cache;
 // what the page needs to start, kept from the start: the first visit loads it before this
 // worker takes over (the rest is kept as it is used)
 const SHELL = [
-  './', 'index.html', 'style.css', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js',
+  './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js',
   'netplay.js', 'touch.js', 'gamepad.js', 'webtorrent.min.js', 'netplay-signal.js', 'base-data.js',
-  'demo-torrent.json', 'demo-page.torrent', 'manifest.webmanifest',
+  ...(Game.demo ? ['demo-torrent.json', 'demo-page.torrent'] : []), 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-256.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
 ];
 // and the engine build this browser uses (as main.js picks it)
@@ -27,7 +31,7 @@ const BUILD = (typeof WebAssembly.Suspending === 'function') ? 'jspi' : 'asyncif
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE)
     // (one by one: a file missing from the site must not keep the others out)
-    .then((cache) => Promise.allSettled([...SHELL, `${BUILD}/serioussam.js`, `${BUILD}/serioussam.wasm`]
+    .then((cache) => Promise.allSettled([...SHELL, `${BUILD}/${Game.engine}.js`, `${BUILD}/${Game.engine}.wasm`]
       .map((path) => cache.add(path))))
     .then(() => self.skipWaiting()));
 });
@@ -41,6 +45,8 @@ function handled(request) {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname.slice(new URL(self.registration.scope).pathname.length);
+  // (the other versions' folders have workers of their own; a first visit there comes here)
+  if (Game.otherVersions.some((folder) => path.startsWith(folder))) return false;
   return !path.startsWith('demo/') && !path.endsWith('.data') && path !== 'lan-signal.json';
 }
 

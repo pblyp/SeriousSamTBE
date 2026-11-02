@@ -20,6 +20,11 @@ rendering with WebGL 2, playable in a web browser on computers and phones.
   left thumb, dragging on the right to look, and buttons.
 - **Settings and saved games** stay in the browser. *Clear my data* on the start page
   removes them; *Clear assets* removes the downloaded demo and your kept game files instead.
+- **The Both Encounters** (`/tbo/`): *The First Encounter* and *The Second Encounter* as one
+  campaign, from your installations of both games (two .zip files, or one with both folders).
+  It runs The Second Encounter's code, which also plays The First Encounter's levels: when
+  they end, its credits roll and The Second Encounter's first level follows. Their
+  deathmatch maps are there too (e.g. Desert Temple), with The Second Encounter's weapons.
 
 It runs in current Chrome, Edge, Firefox and Safari (desktop, Android and iOS).
 
@@ -88,12 +93,18 @@ git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
 source ~/emsdk/emsdk_env.sh
 
 web/build.sh            # the site, in web/build/dist
+web/build.sh Release all all   # with The Both Encounters, in web/build/dist/tbo
 ```
 
 The first build takes a while. It downloads the official demo and the 1.05 patch from
 archive.org (checked against `web/demo_data.sha256`), builds the entity compiler for the
 build machine, and builds the engine twice. Browsers with JavaScript Promise Integration
 get one build, the others an Asyncify build.
+
+The Both Encounters is its own source tree, `SamTBO` (a copy of `SamTSE` with the web
+version's changes, and what playing The First Encounter's levels takes), so `SamTFE` and
+`SamTSE` stay as they are. It builds for the desktop too, like the other two: run it with
+The Second Encounter's files in its folder and `+cdpath <The First Encounter's folder>`.
 
 ### Serving it
 

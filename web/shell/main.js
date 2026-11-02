@@ -34,6 +34,8 @@
   // script with "fullscreen" in its name): the game works without it
   const PageFullscreen = window.PageFullscreen
     || { supported: false, active: () => false, enter() {}, exit() {}, toggle() {} };
+  // what differs between the versions of the game that share this page (see config.js)
+  const Game = window.GameConfig;
 
   const canvas = document.getElementById('canvas');
   const overlay = document.getElementById('overlay');
@@ -56,6 +58,22 @@
 
   const showLog = params.has('log');
   logEl.hidden = !showLog;
+
+  // the version's names, and what it offers
+  document.title = Game.title;
+  document.querySelector('#panel .subtitle').textContent = Game.subtitle;
+  const multipleInstalls = Game.installs.length > 1;
+  if (!Game.demo) {
+    for (const id of ['play-demo', 'play-demo-note', 'about-demo']) document.getElementById(id).hidden = true;
+    ownFilesLabel.classList.replace('secondary', 'primary');
+  }
+  if (multipleInstalls) {
+    const names = Game.installs.map(({ name }) => `<em>${name}</em>`).join(' and ');
+    ownFilesNote.innerHTML = `Zip the folders where ${names} are installed and pick both .zip files `
+      + '(or one .zip with both folders; or drop them here).<br>'
+      + 'The files stay on this device: they are kept in this browser for next time.';
+    zipInput.multiple = true;
+  }
 
   // all engine output, also read by the automated tests
   const engineLog = [];
@@ -107,6 +125,11 @@
         + '(or clear the assets first). If that doesn\'t help, clear your data: settings saved earlier '
         + 'can keep the game from starting.';
     }
+    if (usingOwnFiles && multipleInstalls) {
+      return `Check that the .zip files are of the folders where ${Game.installs.map(({ name }) => name).join(' and ')} `
+        + 'are installed (with their .gro files), and that they are complete: zip the folders again, or pick other '
+        + '.zip files. If that doesn\'t help, clear your data: settings saved by an earlier attempt can keep the game from starting.';
+    }
     if (usingOwnFiles) {
       return 'Check that the .zip is of the folder where Serious Sam: The First Encounter is installed '
         + '(with its .gro files), and that it is complete: zip the folder again, or pick another .zip. '
@@ -124,7 +147,7 @@
   // - the player's data: settings and saved games (/user), and the start page's options
   // ('p2pMode' was the Connection type option, which earlier versions kept)
   const OPTION_KEYS = ['touchControls', 'fullscreen', 'p2pMode'];
-  const OWN_FILES_DB = 'sam-own-files';
+  const OWN_FILES_DB = Game.ownFilesDb;
 
   function deleteDatabase(name) {
     return new Promise((resolve) => {
@@ -239,10 +262,10 @@
     if (!ok) return false;
     const openDatabases = (window.Module && Module.IDBFS && Module.IDBFS.dbs) || {};
     for (const db of Object.values(openDatabases)) db.close();
-    await deleteDatabase('/user');
+    await deleteDatabase(Game.userDir);
     for (const key of OPTION_KEYS) {
       try {
-        localStorage.removeItem(key);
+        localStorage.removeItem(Game.optionPrefix + key);
       } catch (e) {
         // not stored then
       }
@@ -265,14 +288,14 @@
   // options are remembered in this browser (storage may be unavailable, e.g. in private windows)
   function loadOption(name) {
     try {
-      return localStorage.getItem(name);
+      return localStorage.getItem(Game.optionPrefix + name);
     } catch (e) {
       return null;
     }
   }
   function saveOption(name, value) {
     try {
-      localStorage.setItem(name, value);
+      localStorage.setItem(Game.optionPrefix + name, value);
     } catch (e) {
       // not remembered, fine
     }
@@ -377,6 +400,54 @@
     return files;
   }
 
+  // the files of several installations (each game's, see config.js), told apart by their
+  // group files; each file gets the root its installation goes to. Throws, with what is
+  // missing, if not all are there (missing: the installations that are)
+  function selectInstalls(entries) {
+    entries = entries.filter(({ path }) => !isMacJunk(path));
+    // the folders with group files, by the installation they are of (the shallowest one each)
+    const roots = new Map();
+    for (const { path } of entries) {
+      if (!/\.gro$/i.test(path)) continue;
+      const slash = path.lastIndexOf('/');
+      const dir = slash >= 0 ? path.slice(0, slash + 1) : '';
+      const name = path.slice(slash + 1).toLowerCase();
+      const install = Game.installs.find(({ groups }) => groups.test(name));
+      if (install && (!roots.has(install) || dir.length < roots.get(install).length)) {
+        roots.set(install, dir);
+      }
+    }
+    const missing = Game.installs.filter((install) => !roots.has(install));
+    if (missing.length === Game.installs.length) {
+      throw new Error(`No game files of ${Game.installs.map(({ name }) => name).join(' or ')} were found in there.`);
+    }
+    if (missing.length > 0) {
+      const error = new Error(`${missing.map(({ name }) => name).join(' and ')} is still missing: `
+        + `pick ${missing.length > 1 ? 'their' : 'its'} .zip too.`);
+      error.found = entries;
+      throw error;
+    }
+    // each file goes with the installation whose folder it is in (the deepest, if one is in another's)
+    const ordered = [...roots].sort(([, a], [, b]) => b.length - a.length);
+    const files = [];
+    for (const entry of entries) {
+      const found = ordered.find(([, dir]) => entry.path.startsWith(dir));
+      if (!found) continue;
+      const [install, dir] = found;
+      const path = entry.path.slice(dir.length);
+      if (isNeeded(path)) files.push({ ...entry, path, root: install.root, storePrefix: install.storePrefix });
+    }
+    return files;
+  }
+
+  // the name a game file is kept under in this browser, and back
+  const storeKey = ({ path, storePrefix }) => (storePrefix || '') + path;
+  function fromStoreKey(key) {
+    const install = Game.installs.find(({ storePrefix }) => storePrefix && key.startsWith(storePrefix))
+      || Game.installs.find(({ storePrefix }) => !storePrefix);
+    return { path: key.slice(install.storePrefix.length), root: install.root, storePrefix: install.storePrefix };
+  }
+
   // a file of the player's: { path, size, read() -> Promise<ArrayBuffer>, file }
   const fileEntry = (path, file) => ({ path, size: file.size, read: () => file.arrayBuffer(), file });
 
@@ -442,9 +513,10 @@
         stopKeeping(e);
       }
     }
-    for (const { path, size, read } of dataFiles) {
+    for (const file of dataFiles) {
+      const { path, size, read } = file;
       setStatus(`Preparing the game files… ${Math.round(100 * doneBytes / totalBytes)}%`, doneBytes / totalBytes);
-      const fullPath = `/data/${path}`;
+      const fullPath = `${file.root || '/data/'}${path}`;
       FS.mkdirTree(fullPath.slice(0, fullPath.lastIndexOf('/')));
       const buffer = await read();
       if (/\.gro$/i.test(path)) {
@@ -453,7 +525,7 @@
       FS.writeFile(fullPath, new Uint8Array(buffer));
       if (keeping) {
         try {
-          await OwnFiles.put(path, buffer);
+          await OwnFiles.put(storeKey(file), buffer);
         } catch (e) {
           stopKeeping(e);
         }
@@ -462,7 +534,7 @@
     }
     log(`Copied ${dataFiles.length} game files (${Math.round(totalBytes / 1048576)} MB)`);
     if (keeping) {
-      ownFilesKept = { files: dataFiles.map(({ path, size }) => ({ path, size })), bytes: totalBytes };
+      ownFilesKept = { files: dataFiles.map((file) => ({ path: storeKey(file), size: file.size })), bytes: totalBytes };
     }
   }
 
@@ -480,11 +552,12 @@
 
   // ---------------------------------------------------------------- engine
 
-  // the engine keeps settings, saved games and controls in /user, persisted in IndexedDB
+  // the engine keeps settings, saved games and controls in /user (Game.userDir: each version
+  // its own), persisted in IndexedDB
   function mountUserDir() {
     const FS = Module.FS;
-    FS.mkdir('/user');
-    FS.mount(Module.IDBFS, { autoPersist: true }, '/user');
+    FS.mkdir(Game.userDir);
+    FS.mount(Module.IDBFS, { autoPersist: true }, Game.userDir);
     Module.addRunDependency('syncfs');
     FS.syncfs(true, (err) => {
       if (err) {
@@ -496,7 +569,8 @@
 
   function engineArguments() {
     const args = params.get('args');
-    const list = args ? args.split(' ').filter((a) => a !== '') : [];
+    // (the version's own first, e.g. where The First Encounter's files are)
+    const list = [...Game.args, ...(args ? args.split(' ').filter((a) => a !== '') : [])];
     // console commands are run from a script file
     const commands = params.get('exec');
     if (commands) {
@@ -567,7 +641,7 @@
   if (joinCode) {
     const invite = document.getElementById('invite');
     invite.textContent = `You are invited to a network game (room ${NetPlay.showCode(joinCode)}). `
-      + 'Start the demo, or use your game files, to join it.';
+      + (Game.demo ? 'Start the demo, or use your game files, to join it.' : 'Use your game files to join it.');
     invite.hidden = false;
   }
 
@@ -724,7 +798,7 @@
     log(`Using the ${build} build`);
     try {
       await prepareData();
-      await loadScript(`${build}/serioussam.js`);
+      await loadScript(`${build}/${Game.engine}.js`);
     } catch (e) {
       showError(e.message);
     }
@@ -753,14 +827,42 @@
     });
   }
 
+  // with several installations: those picked so far (each .zip is picked on its own on some
+  // devices), until all are there
+  let pickedEntries = [];
+
   // the player's game folder, zipped (or the folder itself, dropped on the page)
   async function useFiles(entries) {
     try {
       if (entries.length === 1 && /\.zip$/i.test(entries[0].path)) {
         ownFilesNote.textContent = 'Reading the .zip…';
         entries = await ZipReader.list(entries[0].file);
+      } else if (multipleInstalls && entries.some(({ path }) => /\.zip$/i.test(path))) {
+        // (several .zip files: each one's files in a folder of its own)
+        ownFilesNote.textContent = 'Reading the .zip files…';
+        const all = [];
+        for (const [i, entry] of entries.entries()) {
+          if (/\.zip$/i.test(entry.path)) {
+            for (const inner of await ZipReader.list(entry.file)) all.push({ ...inner, path: `zip${i}/${inner.path}` });
+          } else {
+            all.push(entry);
+          }
+        }
+        entries = all;
       }
-      dataFiles = selectGameFiles(entries);
+      if (multipleInstalls) {
+        // (those picked before, in folders of their own)
+        const pickedBefore = pickedEntries.map((entry) => ({ ...entry, path: `before/${entry.path}` }));
+        try {
+          dataFiles = selectInstalls([...pickedBefore, ...entries]);
+        } catch (e) {
+          if (e.found) pickedEntries = e.found;
+          throw e;
+        }
+        pickedEntries = [];
+      } else {
+        dataFiles = selectGameFiles(entries);
+      }
       usingOwnFiles = true;
       ownFilesFromStore = false;
     } catch (e) {
@@ -778,7 +880,7 @@
       if (!meta) {
         throw new Error('The game files kept in this browser are gone. Pick the .zip again.');
       }
-      dataFiles = meta.files.map(({ path, size }) => ({ path, size, read: () => OwnFiles.read(path) }));
+      dataFiles = meta.files.map(({ path: key, size }) => ({ ...fromStoreKey(key), size, read: () => OwnFiles.read(key) }));
       usingOwnFiles = true;
       ownFilesFromStore = true;
       await loadScript('base-data.js');
@@ -797,6 +899,10 @@
     // the demo is the main choice only when there are no kept files
     playDemoButton.classList.toggle('primary', !meta);
     playDemoButton.classList.toggle('secondary', !!meta);
+    if (!Game.demo) {
+      ownFilesLabel.classList.toggle('primary', !meta);
+      ownFilesLabel.classList.toggle('secondary', !!meta);
+    }
     if (meta) {
       playOwnNote.textContent = `Kept in this browser · about ${Math.max(1, Math.round(meta.bytes / 1048576))} MB`;
     }
@@ -839,9 +945,9 @@
     }
   });
   zipInput.addEventListener('change', () => {
-    const file = zipInput.files[0];
-    if (file) {
-      useFiles([fileEntry(file.name, file)]);
+    const files = [...zipInput.files];
+    if (files.length > 0) {
+      useFiles(files.map((file) => fileEntry(file.name, file)));
     }
     // (so picking the same file again after fixing something is noticed)
     zipInput.value = '';

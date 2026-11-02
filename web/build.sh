@@ -1,7 +1,9 @@
 #!/bin/bash
-# Builds the web version of Serious Sam: The First Encounter into web/build/dist.
+# Builds the web version of Serious Sam: The First Encounter into web/build/dist, and The Both
+# Encounters (SamTBO: both games' levels, from the player's two installations) into
+# web/build/dist/tbo.
 #
-#   web/build.sh [Release|RelWithDebInfo|Debug] [jspi|asyncify|all]
+#   web/build.sh [Release|RelWithDebInfo|Debug] [jspi|asyncify|all] [tfe|tbo|all]
 #
 # Needs an activated emsdk (source <emsdk>/emsdk_env.sh), cmake, ninja, flex, bison and node.
 # The demo data is fetched and packaged on the first run (see fetch_demo_data.sh).
@@ -16,6 +18,10 @@ BUILD_TYPE="${1:-Release}"
 VARIANTS="${2:-all}"
 if [ "$VARIANTS" = "all" ]; then
   VARIANTS="jspi asyncify"
+fi
+GAMES="${3:-tfe}"
+if [ "$GAMES" = "all" ]; then
+  GAMES="tfe tbo"
 fi
 
 if ! command -v emcmake >/dev/null; then
@@ -33,25 +39,47 @@ cmake -S "$SRC_DIR" -B "$NATIVE_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DTFE=T
 cmake --build "$NATIVE_DIR" --target ecc
 ECC="$NATIVE_DIR/ecc"
 
-# 2. the engine, once per way of yielding to the browser
-mkdir -p "$DIST_DIR"
-for variant in $VARIANTS; do
-  out="$BUILD_DIR/wasm-$variant"
-  emcmake cmake -S "$SRC_DIR" -B "$out" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTFE=TRUE \
-    -DECC="$ECC" -DWEB_ASYNC="$(echo "$variant" | tr a-z A-Z)" >/dev/null
-  cmake --build "$out" --target SeriousSam
-  mkdir -p "$DIST_DIR/$variant"
-  cp "$out/serioussam.js" "$out/serioussam.wasm" "$DIST_DIR/$variant/"
-done
-
-# 3. the page and the demo data (SITE_URL: where the site will be, for demo.torrent's web seed;
-#    DEMO_MIRRORS: other sites with a copy of demo/, see README.md)
-cp -R "$WEB_DIR/shell/"* "$DIST_DIR/"
 # the page's libraries (WebTorrent, Trystero)
 if [ "$WEB_DIR/tools/package-lock.json" -nt "$WEB_DIR/tools/node_modules/.package-lock.json" ]; then
   (cd "$WEB_DIR/tools" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null)
 fi
-node "$WEB_DIR/tools/build_libs.mjs" "$DIST_DIR"
+
+# 2. the engine, once per way of yielding to the browser
+#    (tfe: SamTFE into dist; tbo: SamTBO into dist/tbo, its page with its own config.js)
+for game in $GAMES; do
+  case "$game" in
+    tfe) src="$SRC_DIR"; dist="$DIST_DIR"; prefix="wasm"; target="SeriousSam"; engine="serioussam" ;;
+    tbo) src="$REPO_DIR/SamTBO/Sources"; dist="$DIST_DIR/tbo"; prefix="wasm-tbo"; target="SeriousSamTBO"; engine="serioussamtbo" ;;
+    *) echo "Unknown game: $game (tfe, tbo or all)" >&2; exit 1 ;;
+  esac
+  mkdir -p "$dist"
+  for variant in $VARIANTS; do
+    out="$BUILD_DIR/$prefix-$variant"
+    emcmake cmake -S "$src" -B "$out" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTFE=TRUE \
+      -DECC="$ECC" -DWEB_ASYNC="$(echo "$variant" | tr a-z A-Z)" >/dev/null
+    cmake --build "$out" --target "$target"
+    mkdir -p "$dist/$variant"
+    cp "$out/$engine.js" "$out/$engine.wasm" "$dist/$variant/"
+  done
+  # the page (the same for both, apart from the version's own files)
+  cp -R "$WEB_DIR/shell/"* "$dist/"
+  if [ "$game" = "tbo" ]; then
+    cp -R "$WEB_DIR/shell-tbo/"* "$dist/"
+  fi
+  node "$WEB_DIR/tools/build_libs.mjs" "$dist"
+done
+
+# 3. the game data: TBO's base package (its players provide all the rest)
+if [[ " $GAMES " == *" tbo "* ]]; then
+  "$WEB_DIR/package_base.sh" "$DIST_DIR/tbo" SamTBO >/dev/null
+fi
+
+# and TFE's base package and demo (SITE_URL: where the site will be, for demo.torrent's web
+# seed; DEMO_MIRRORS: other sites with a copy of demo/, see README.md)
+if [[ " $GAMES " != *" tfe "* ]]; then
+  echo "Built into $DIST_DIR"
+  exit 0
+fi
 if [ ! -f "$DIST_DIR/demo-page.torrent" ] || [ ! -f "$DIST_DIR/base-data.data" ]; then
   if [ ! -d "$BUILD_DIR/demo-data" ]; then
     "$WEB_DIR/fetch_demo_data.sh"

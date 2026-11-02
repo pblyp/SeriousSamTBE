@@ -1,13 +1,14 @@
 name: Web version (GitHub Pages)
 
-# Builds The First Encounter for the web (web/build.sh) and publishes it with
-# GitHub Pages. In the repository's settings, Pages → Source must be "GitHub Actions".
+# Builds The First Encounter, and The Both Encounters (in tbo/), for the web (web/build.sh)
+# and publishes them with GitHub Pages. In the repository's settings, Pages → Source must
+# be "GitHub Actions".
 
 on:
   workflow_dispatch:
   push:
     branches: [ "main", "web-port" ]
-    paths: [ "SamTFE/**", "web/**", ".github/workflows/web-pages.yml" ]
+    paths: [ "SamTFE/**", "SamTBO/**", "web/**", ".github/workflows/web-pages.yml" ]
 
 permissions:
   contents: read
@@ -61,7 +62,7 @@ jobs:
     - name: Build
       run: |
         source emsdk/emsdk_env.sh
-        SITE_URL="${{ steps.pages.outputs.base_url }}/" web/build.sh Release
+        SITE_URL="${{ steps.pages.outputs.base_url }}/" web/build.sh Release all all
       env:
         # other sites with a copy of demo/ (comma separated), asked before this one: a
         # repository variable (Settings > Secrets and variables > Actions > Variables)
