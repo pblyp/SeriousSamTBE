@@ -1197,6 +1197,8 @@ properties:
  192 FLOAT m_tmSeriousBombFired = -10.0f,  // when the bomb was last fired
 
  193 BOOL m_bInTFEWorld = FALSE,     // set if the keys are from The First Encounter's levels
+ 194 FLOAT m_tmTFECreditsEnd = -1.0f,  // when The First Encounter's credits end (started by its last level)
+ 195 BOOL m_bSkipTFECredits = FALSE,   // set if the player skipped them
 
 {
   ShellLaunchData ShellLaunchData_array;  // array of data describing flying empty shells
@@ -2266,6 +2268,33 @@ functions:
       m_ulKeys = 0;
       m_bInTFEWorld = bTFE;
     }
+  }
+
+  // lines in a text of The First Encounter's (its copy, which has the same name as this game's)
+  INDEX CountTFETextLines(const CTFileName &fnm)
+  {
+    INDEX ctLines = 0;
+    try {
+      CTFileStream strm;
+      strm.OpenFromCDPath_t(fnm);
+      while (!strm.AtEOF()) {
+        CTString strLine;
+        strm.GetLine_t(strLine);
+        ctLines++;
+      }
+    } catch (const char *) {
+      ctLines = 0;
+    }
+    return ctLines;
+  }
+
+  // how long The First Encounter's credits roll (as Credits_Render() scrolls them, 2 lines per
+  // second until the last has gone off the screen)
+  FLOAT TFECreditsLength(void)
+  {
+    const INDEX ctLines = CountTFETextLines(CTFILENAME("Data\\Credits.txt"))
+                        + CountTFETextLines(CTFILENAME("Data\\Credits_End.txt"));
+    return (ctLines+24)/2.0f;
   }
 
   void UpdateLevelStats(void)
@@ -3960,6 +3989,10 @@ functions:
   // Auto-actions
   void AutoActions(const CPlayerAction &pa) 
   {
+    // (skipping The First Encounter's credits, see FirstEncounterEnd())
+    if (ulNewButtons&(PLACT_FIRE|PLACT_USE)) {
+      m_bSkipTFECredits = TRUE;
+    }
     // if fire, use or computer is pressed
     if (ulNewButtons&(PLACT_FIRE|PLACT_USE|PLACT_COMPUTER)) {
       if (m_penCamera!=NULL) {
@@ -5960,6 +5993,27 @@ procedures:
     return ERebirth();
   };
 
+  // The First Encounter's end: once its credits have rolled (Fire or Use skips them), The Second
+  // Encounter's first level, with what the players have (as at a level's end)
+  FirstEncounterEnd() {
+    // stop firing
+    ((CPlayerWeapons&)*m_penWeapons).SendEvent(EReleaseWeapon());
+
+    m_bSkipTFECredits = FALSE;
+    while (_pTimer->CurrentTick()<m_tmTFECreditsEnd && !m_bSkipTFECredits) {
+      autowait(_pTimer->TickQuantum);
+    }
+    m_tmTFECreditsEnd = -1.0f;
+    _pShell->Execute("sam_iStartCredits=-1;");
+
+    // as a world link does (the players start at the level's start markers)
+    _SwcWorldChange.strGroup = "";
+    _SwcWorldChange.plLink = GetPlacement();
+    _SwcWorldChange.iType = (INDEX)WLT_FIXED;
+    _pNetwork->ChangeLevel(CTFILENAME("Levels\\LevelsMP\\1_0_InTheLastEpisode.wld"), FALSE, 0);
+    return EReturn();
+  };
+
   TheEnd() {
     // if not playing demo
     if (!_pNetwork->IsPlayingDemo()) {
@@ -6570,6 +6624,10 @@ procedures:
       // if start credits
       } else if (GetActionMarker()->m_paaAction==PAA_STARTCREDITS) {
         _pShell->Execute("sam_iStartCredits=2;");
+        // (The First Encounter's end waits for them, see FirstEncounterEnd())
+        if (GetWorld()->wo_bTFE) {
+          m_tmTFECreditsEnd = _pTimer->CurrentTick()+TFECreditsLength();
+        }
 
       // if stop scroller
       } else if (GetActionMarker()->m_paaAction==PAA_STOPSCROLLER) {
@@ -6625,8 +6683,13 @@ procedures:
       // if end of entire game
       } else if (GetActionMarker()->m_paaAction==PAA_ENDOFGAME) {
 
+        // The First Encounter's end leads on to The Second Encounter
+        if (GetWorld()->wo_bTFE) {
+          autocall FirstEncounterEnd() EReturn;
+        } else {
         // record stats
         jump TheEnd();
+        }
       } else if (GetActionMarker()->m_paaAction==PAA_NOGRAVITY) {
         SetPhysicsFlags(GetPhysicsFlags() & ~(EPF_TRANSLATEDBYGRAVITY|EPF_ORIENTEDBYGRAVITY));
         if( GetActionMarker()->GetParent() != NULL)

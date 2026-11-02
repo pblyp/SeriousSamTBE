@@ -715,6 +715,20 @@ void UNZIPGetFileInfo(INDEX iHandle, CTFileName &fnmZip,
 }
 
 // open a zip file entry for reading
+// get index of a file in an archive from the CD path (-1 for no file), even if other
+// archives have it too
+INDEX UNZIPGetFileIndexCD(const CTFileName &fnm)
+{
+  for(INDEX iFile=0; iFile<_azeFiles.Count(); iFile++) {
+    if (_azeFiles[iFile].ze_bCD && _azeFiles[iFile].ze_fnm == fnm) {
+      return iFile;
+    }
+  }
+  return -1;
+}
+
+static INDEX UNZIPOpenEntry_t(const CTFileName &fnm, CZipEntry *pze);
+
 INDEX UNZIPOpen_t(const CTFileName &fnm)
 {
   CZipEntry *pze = NULL;
@@ -727,6 +741,20 @@ INDEX UNZIPOpen_t(const CTFileName &fnm)
       break;
     }
   }
+  return UNZIPOpenEntry_t(fnm, pze);
+}
+
+// open a zip file entry by its index
+INDEX UNZIPOpenAtIndex_t(INDEX iFile)
+{
+  if (iFile<0 || iFile>=_azeFiles.Count()) {
+    ThrowF_t(TRANS("File not found: #%d"), iFile);
+  }
+  return UNZIPOpenEntry_t(_azeFiles[iFile].ze_fnm, &_azeFiles[iFile]);
+}
+
+static INDEX UNZIPOpenEntry_t(const CTFileName &fnm, CZipEntry *pze)
+{
 
   // if not found
   if (pze==NULL) {

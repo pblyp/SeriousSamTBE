@@ -264,6 +264,8 @@ public:
 
   /* Open an existing file. */
   void Open_t(const CTFileName &fnFileName, enum CTStream::OpenMode om=CTStream::OM_READ); // throw char *
+  /* Open the CD path's version of a file (The First Encounter's), for reading. */
+  void OpenFromCDPath_t(const CTFileName &fnFileName); // throw char *
   /* Create a new file or overwrite existing. */
   void Create_t(const CTFileName &fnFileName, enum CTStream::CreateMode cm=CTStream::CM_BINARY); // throw char *
   /* Close an open file. */

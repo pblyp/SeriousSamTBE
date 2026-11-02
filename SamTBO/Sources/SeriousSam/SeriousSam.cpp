@@ -182,7 +182,9 @@ CTString sam_strTrainingLevel = "Levels\\KarnakDemo.wld";
 CTString sam_strVersion = "1.10";
 CTString sam_strModName = TRANS("-   T H E  B O T H  E N C O U N T E R S   -");
 
-CTString sam_strFirstLevel = "Levels\\LevelsMP\\1_0_InTheLastEpisode.wld";
+// (the campaign starts with The First Encounter's, and goes on to The Second Encounter's
+// "Levels\\LevelsMP\\1_0_InTheLastEpisode.wld" at its end, see CPlayer::FirstEncounterEnd())
+CTString sam_strFirstLevel = "Levels\\01_Hatshepsut.wld";
 CTString sam_strIntroLevel = "Levels\\LevelsMP\\Intro.wld";
 CTString sam_strGameName = "serioussamtbo";
 

@@ -51,12 +51,20 @@ void PrintOneLine(CDrawPort *pdp, const CTString &strText)
   pixJ+=pixLineHeight;
 }
 
-static void LoadOneFile(const CTFileName &fnm)
+static void LoadOneFile(const CTFileName &fnm, BOOL bTFE = FALSE)
 {
   try {
-    // open the file
+    // open the file (in The First Encounter's levels, its copy, which has the same name)
     CTFileStream strm;
-    strm.Open_t(fnm);
+    if (bTFE) {
+      try {
+        strm.OpenFromCDPath_t(fnm);
+      } catch (const char *) {
+        strm.Open_t(fnm);
+      }
+    } else {
+      strm.Open_t(fnm);
+    }
 
     // count number of lines
     INDEX ctLines = 0;
@@ -91,13 +99,15 @@ void Credits_On(INDEX iType)
 
   _astrCredits.PopAll();
   
+  // (started in one of The First Encounter's levels: its texts)
+  const BOOL bTFE = _pNetwork->ga_World.wo_bTFE;
   if (iType==1) {
     _fSpeed = 1.0f;
-    LoadOneFile(CTFILENAME("Data\\Intro.txt"));
+    LoadOneFile(CTFILENAME("Data\\Intro.txt"), bTFE);
   } else if (iType==2) {
     _fSpeed = 2.0f;
-    LoadOneFile(CTFILENAME("Data\\Credits.txt"));
-    LoadOneFile(CTFILENAME("Data\\Credits_End.txt"));
+    LoadOneFile(CTFILENAME("Data\\Credits.txt"), bTFE);
+    LoadOneFile(CTFILENAME("Data\\Credits_End.txt"), bTFE);
   } else {
     _fSpeed = 2.0f;
     if (_bDemoData) {

@@ -990,6 +990,47 @@ void CTFileStream::Open_t(const CTFileName &fnFileName, CTStream::OpenMode om/*=
   _plhOpenedStreams->AddTail( strm_lnListNode);
 }
 
+/*
+ * Open the CD path's version of a file (The First Encounter's), for reading: where the base
+ * directory has a file with the same name, it is the one that is read otherwise.
+ */
+void CTFileStream::OpenFromCDPath_t(const CTFileName &fnFileName)
+{
+  // if current thread has not enabled stream handling
+  if (!_bThreadCanHandleStreams) {
+    // error
+    ::ThrowF_t(TRANS("Cannot open file `%s', stream handling is not enabled for this thread"),
+      (const char *) (CTString&)fnFileName);
+  }
+  ASSERT(fstrm_pFile==NULL && fstrm_iZipHandle==-1);
+  if (_fnmCDPath=="") {
+    ::ThrowF_t(TRANS("Cannot open file `%s' (no CD path)"), (const char *) (CTString&)fnFileName);
+  }
+
+  CTFileName fnmFullFileName = _fnmCDPath + convertWindow1251ToUtf8(fnFileName);
+  // a loose file there
+  fstrm_pFile = fopen(fnmFullFileName, "rb");
+  // or one in its archives
+  if (fstrm_pFile==NULL) {
+    const INDEX iFile = UNZIPGetFileIndexCD(fnFileName);
+    if (iFile>=0) {
+      fstrm_iZipHandle = UNZIPOpenAtIndex_t(iFile);
+      fstrm_slZipSize = UNZIPGetSize(fstrm_iZipHandle);
+      fstrm_pubZipBuffer = new UBYTE[fstrm_slZipSize];
+      UNZIPReadBlock_t(fstrm_iZipHandle, fstrm_pubZipBuffer, 0, fstrm_slZipSize);
+      fnmFullFileName = fnFileName;
+    }
+  }
+  fstrm_bReadOnly = TRUE;
+
+  if (fstrm_pFile == NULL && fstrm_iZipHandle==-1) {
+    Throw_t(TRANS("Cannot open file `%s' (%s)"), (const char *) (CTString&)fnmFullFileName,
+      strerror(errno));
+  }
+  strm_strStreamDescription = fnmFullFileName;
+  _plhOpenedStreams->AddTail( strm_lnListNode);
+}
+
 static void MakeSureDirectoryPathExists(const CTFileName &fnmFullFileName)
 {
     STUBBED("!!! FIXME: get the code back in from Ryan's original port.");
