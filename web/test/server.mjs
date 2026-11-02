@@ -65,7 +65,8 @@ const TYPES = {
 };
 
 // cors: let pages of other origins read the files (as a demo mirror must);
-// served.demo counts the bytes of demo/ files sent, served.notFound the files missing
+// served.demo counts the bytes of the demos' files sent (demo/..., not their lists),
+// served.notFound the files missing
 export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false } = {}) {
   const served = { demo: 0, notFound: 0 };
   const corsHeaders = cors ? {
@@ -101,7 +102,7 @@ export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false 
         res.writeHead(404, corsHeaders).end('not found');
         return;
       }
-      const isDemo = urlPath.startsWith('/demo/');
+      const isDemo = urlPath.startsWith('/demo/') && !urlPath.endsWith('/demo-files.json');
       const headers = {
         ...corsHeaders,
         'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',

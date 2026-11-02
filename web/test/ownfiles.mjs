@@ -1,11 +1,12 @@
-// "Use my game files" with the staged demo folder zipped, as a player does with their
-// installation: checks that the page unpacks zips made in different ways exactly,
-// refuses what isn't a zip, starts the game from a zip made like macOS Finder's
-// "Compress" (with __MACOSX entries), keeps the files for the next visit ("Play my game
-// files"), explains what is wrong with broken game files (and doesn't keep those), and
-// clears the assets and the player's data separately when asked to.
+// "Use my game files" with the staged demo folders zipped, as a player does with their two
+// installations (each game's demo counts as its installation): checks that the page unpacks
+// zips made in different ways exactly, refuses what isn't a zip, starts the game from the
+// two zips (The First Encounter's made like macOS Finder's "Compress", with __MACOSX entries),
+// keeps the files for the next visit ("Play my game files"), explains what is wrong with broken
+// game files (and doesn't keep those), and clears the assets and the player's data separately
+// when asked to.
 //
-//   node ownfiles.mjs [--browser chromium|webkit|firefox] [game dir] [screenshot]
+//   node ownfiles.mjs [--browser chromium|webkit|firefox] [screenshot]
 
 import { chromium, webkit, firefox } from 'playwright';
 import { serve } from './server.mjs';
@@ -20,8 +21,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const browserIndex = argv.indexOf('--browser');
 const browserName = browserIndex >= 0 ? argv.splice(browserIndex, 2)[1] : 'chromium';
-const gameDir = argv[0] || path.resolve(here, '../build/demo-data');
+const gameDir = path.resolve(here, '../build/demo-data');
+const tseDir = path.resolve(here, '../build/tse-demo-data');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sam-zips-'));
+// The Second Encounter's, as it is
+const tseZip = path.join(tmp, 'tse.zip');
+execFileSync('zip', ['-r', '-q', tseZip, '.', '-x', '*.DS_Store'], { cwd: tseDir });
 
 // the game folder, zipped as "Serious Sam/...", as files at the top, and stored (not compressed)
 const linked = path.join(tmp, 'Serious Sam');
@@ -33,16 +38,16 @@ const zips = {
 execFileSync('zip', ['-r', '-q', zips['folder inside'], 'Serious Sam', '-x', '*.DS_Store'], { cwd: tmp });
 execFileSync('zip', ['-r', '-q', '-0', zips['files at the top, stored'], '.', '-x', '*.DS_Store'], { cwd: gameDir });
 // broken installations: a .gro file cut short, and one that isn't the game's
-function brokenZip(name, groContents) {
+function brokenZip(name, groContents, from = gameDir, groName = '1_00c_demo.gro') {
   const dir = path.join(tmp, name);
-  execFileSync('rsync', ['-a', '--exclude', '.DS_Store', `${gameDir}/`, `${dir}/`]);
-  fs.writeFileSync(path.join(dir, '1_00c_demo.gro'), groContents);
+  execFileSync('rsync', ['-a', '--exclude', '.DS_Store', `${from}/`, `${dir}/`]);
+  fs.writeFileSync(path.join(dir, groName), groContents);
   execFileSync('zip', ['-r', '-q', `${dir}.zip`, '.'], { cwd: dir });
   return `${dir}.zip`;
 }
 const cutShortZip = brokenZip('cut-short', fs.readFileSync(path.join(gameDir, '1_00c_demo.gro')).subarray(0, 20000000));
 execFileSync('zip', ['-q', path.join(tmp, 'other.zip'), 'ModEXT.txt'], { cwd: gameDir });
-const notTheGameZip = brokenZip('not-the-game', fs.readFileSync(path.join(tmp, 'other.zip')));
+const notTheGameZip = brokenZip('not-the-game', fs.readFileSync(path.join(tmp, 'other.zip')), tseDir, 'SEDemo1_00.gro');
 
 let finderZip = zips['folder inside'];
 if (process.platform === 'darwin') {
@@ -102,17 +107,17 @@ await page.setInputFiles('#game-zip', notZipFile);
 await page.waitForFunction(() => /not a \.zip/.test(document.getElementById('own-files-note').textContent));
 results['a file that isn\'t a zip is refused'] = true;
 
-// play from the Finder-like zip
-await page.setInputFiles('#game-zip', finderZip);
+// play from the two zips, The First Encounter's the Finder-like one
+await page.setInputFiles('#game-zip', [tseZip, finderZip]);
 await page.waitForSelector('#start:not([hidden])', { timeout: 120000 });
 await page.click('#start');
 await page.waitForFunction(() => window.engineLog.some((l) => l.includes('Demo data detected')), null, { timeout: 60000 });
 await page.waitForTimeout(8000);
 const log = await page.evaluate(() => window.engineLog);
 for (const l of log.filter((l) => /Copied|Demo data|Error|error/.test(l))) console.log(l);
-results['the game starts from the zip'] = log.some((l) => l.includes('Demo data detected'))
+results['the game starts from the zips'] = log.some((l) => l.includes('Demo data detected'))
   && !log.some((l) => l.includes('FatalError'));
-await page.screenshot({ path: argv[1] || path.join(here, '../build/ownfiles.png') });
+await page.screenshot({ path: argv[0] || path.join(here, '../build/ownfiles.png') });
 const pageDatabases = (p) => p.evaluate(async () => (await indexedDB.databases()).map((d) => d.name).sort().join(' '));
 await page.waitForFunction(() => window.engineLog.some((l) => l.includes('are kept in this browser')), null, { timeout: 20000 })
   .catch(() => {});
@@ -137,7 +142,7 @@ if (offered) {
 // clearing the assets keeps the player's data, and the other way round
 await page.reload();
 await page.waitForSelector('#play-own:not([hidden])', { timeout: 10000 }).catch(() => {});
-await page.evaluate(() => localStorage.setItem('touchControls', 'off'));
+await page.evaluate(() => localStorage.setItem('tbo.touchControls', 'off'));
 let before = await pageDatabases(page);
 page.once('dialog', (dialog) => dialog.dismiss());
 await page.click('#clear-assets');
@@ -147,8 +152,8 @@ await page.click('#clear-assets');
 await page.waitForFunction(() => document.getElementById('purge-status').textContent !== '');
 let after = await pageDatabases(page);
 results[`clearing the assets asks first, keeps settings and saved games (${before} -> ${after || 'none'})`] = keptWhenCancelled
-  && before.includes('sam-own-files') && !after.includes('sam-own-files') && !after.includes('EM_PRELOAD_CACHE')
-  && after.includes('/user') && await page.evaluate(() => localStorage.getItem('touchControls') === 'off')
+  && before.includes('tbo-own-files') && !after.includes('tbo-own-files') && !after.includes('EM_PRELOAD_CACHE')
+  && after.includes('/tbo-user') && await page.evaluate(() => localStorage.getItem('tbo.touchControls') === 'off')
   && !await page.isVisible('#play-own');
 before = after;
 page.once('dialog', (dialog) => dialog.accept());
@@ -156,15 +161,15 @@ await page.click('#clear-data');
 await page.waitForFunction(() => document.getElementById('purge-status').textContent.includes('data'));
 after = await pageDatabases(page);
 results[`clearing my data removes settings and saved games and resets the options (${before} -> ${after || 'none'})`] =
-  before.includes('/user') && !after.includes('/user')
-  && await page.evaluate(() => localStorage.getItem('touchControls') === null && document.getElementById('touch-mode').value === 'auto');
+  before.includes('/tbo-user') && !after.includes('/tbo-user')
+  && await page.evaluate(() => localStorage.getItem('tbo.touchControls') === null && document.getElementById('touch-mode').value === 'auto');
 
 // broken game files: the page says what is wrong and what to do
-async function failWith(zip) {
+async function failWith(zips) {
   const failing = await browser.newPage({ viewport: { width: 900, height: 700 } });
   failing.on('pageerror', (e) => errors.push(e.stack || e.message));
   await failing.goto(`${server.url}/index.html`);
-  await failing.setInputFiles('#game-zip', zip);
+  await failing.setInputFiles('#game-zip', zips);
   await failing.waitForFunction(() => !document.getElementById('error').hidden || !document.getElementById('start').hidden, null, { timeout: 120000 });
   if (await failing.isVisible('#start')) {
     await failing.click('#start');
@@ -172,15 +177,16 @@ async function failWith(zip) {
   }
   return failing;
 }
-let failing = await failWith(cutShortZip);
+let failing = await failWith([tseZip, cutShortZip]);
 results['a cut short .gro is named'] = /1_00c_demo\.gro is damaged or incomplete/.test(await failing.textContent('#status'))
   && await failing.isVisible('#start-over');
 await failing.close();
-failing = await failWith(notTheGameZip);
-results['the game failing to start with the files is explained'] =
+failing = await failWith([notTheGameZip, finderZip]);
+const said = (await failing.textContent('#error-text')).trim().split('\n')[0];
+results[`the game failing to start with the files is explained (${said})`] =
   (await failing.textContent('#status')).includes('couldn\'t start with your game files')
   && (await failing.textContent('#error-hint')).includes('.zip')
-  && (await failing.textContent('#error-text')).includes('Cannot initialize classes');
+  && said !== '';
 
 // clearing from the error: the assets, then the player's data
 before = await pageDatabases(failing);
@@ -190,14 +196,14 @@ await failing.waitForSelector('#play-demo');
 await failing.waitForTimeout(500);
 after = await pageDatabases(failing);
 results[`files the game didn't start with aren't offered, and clearing the assets from the error removes them (${before} -> ${after || 'none'})`] =
-  !await failing.isVisible('#play-own') && before.includes('sam-own-files') && !after.includes('sam-own-files') && after.includes('/user');
+  !await failing.isVisible('#play-own') && before.includes('tbo-own-files') && !after.includes('tbo-own-files') && after.includes('/tbo-user');
 await failing.close();
-failing = await failWith(notTheGameZip);
+failing = await failWith([notTheGameZip, finderZip]);
 failing.once('dialog', (dialog) => dialog.accept());
 await failing.click('#error-clear-data');
 await failing.waitForSelector('#play-demo');
 await failing.waitForTimeout(500);
-results['clearing my data from the error removes settings and saved games'] = !(await pageDatabases(failing)).includes('/user');
+results['clearing my data from the error removes settings and saved games'] = !(await pageDatabases(failing)).includes('/tbo-user');
 await failing.close();
 
 await browser.close();

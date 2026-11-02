@@ -44,7 +44,7 @@ if (!firstLog.some((l) => l.includes("Cannot load script file 'Scripts/Persisten
 
 // 2nd run: the settings must load
 const secondLog = await session(async (page) => {
-  const value = await page.evaluate(() => Module.FS.readFile('/user/Scripts/PersistentSymbols.ini', { encoding: 'utf8' }));
+  const value = await page.evaluate(() => Module.FS.readFile(`${GameConfig.userDir}/Scripts/PersistentSymbols.ini`, { encoding: 'utf8' }));
   if (!value.includes('web_fMaxPixelRatio=(FLOAT)1.25')) {
     console.log('FAIL: web_fMaxPixelRatio was not saved:\n' + value.split('\n').filter((l) => l.includes('web_') || l.includes('sam_iScreen')).join('\n'));
     failed = true;

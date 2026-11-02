@@ -31,7 +31,7 @@ const context = await browser.newContext({ viewport: { width: 1024, height: 768 
 
 // the files once: picked, kept in the browser (the game counts them as kept once it has run)
 const first = await context.newPage();
-await first.goto(`${server.url}/tbo/index.html`);
+await first.goto(`${server.url}/index.html`);
 await first.setInputFiles('#game-zip', zips);
 await first.waitForSelector('#start:not([hidden]), #error:not([hidden])', { timeout: 30 * 60000 });
 if (await first.isVisible('#error')) {
@@ -81,7 +81,7 @@ for (const level of wanted) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`${server.url}/tbo/index.html?args=${encodeURIComponent(`+level ${level}`)}`);
+  await page.goto(`${server.url}/index.html?args=${encodeURIComponent(`+level ${level}`)}`);
   await page.waitForSelector('#play-own:not([hidden])', { timeout: 20000 });
   await page.click('#play-own');
   await page.waitForSelector('#start:not([hidden])', { timeout: 120000 });

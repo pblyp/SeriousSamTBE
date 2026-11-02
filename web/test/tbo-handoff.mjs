@@ -33,7 +33,7 @@ const results = {};
 
 // New Game, from the menu: Single Player, New Game, the difficulty
 const page = await context.newPage();
-await page.goto(`${server.url}/tbo/index.html`);
+await page.goto(`${server.url}/index.html`);
 await page.setInputFiles('#game-zip', zips);
 await page.waitForSelector('#start:not([hidden])', { timeout: 30 * 60000 });
 await page.click('#start');
@@ -58,7 +58,7 @@ await page.close();
 
 // The First Encounter's end, then The Second Encounter (the files are kept from the first visit)
 const end = await context.newPage();
-await end.goto(`${server.url}/tbo/index.html?args=${encodeURIComponent('+level Levels/15_TheGreatPyramid.wld')}`);
+await end.goto(`${server.url}/index.html?args=${encodeURIComponent('+level Levels/15_TheGreatPyramid.wld')}`);
 await end.waitForSelector('#play-own:not([hidden])', { timeout: 20000 });
 await end.click('#play-own');
 await end.waitForSelector('#start:not([hidden])', { timeout: 120000 });

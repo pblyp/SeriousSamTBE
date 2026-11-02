@@ -25,7 +25,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack || e.message));
 const results = {};
 
-await page.goto(`${server.url}/tbo/index.html`);
+await page.goto(`${server.url}/index.html`);
 results['the page offers the demos'] = await page.isVisible('#play-demo')
   && (await page.textContent('#play-demo')) === 'Play the demos';
 await page.click('#play-demo');

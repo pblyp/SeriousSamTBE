@@ -6,7 +6,7 @@
 // archive. The cache is kept small, so pieces are read again and again. The demo's
 // SE1_10b.gro is in /data, the others in /tfe, the CD path (as The First Encounter's files).
 //
-// Needs the TBO web build (web/build.sh Release all tbo, or all) and the demo in dist/demo.
+// Needs the web build (web/build.sh) and The First Encounter's demo in dist/demo/tfe.
 //
 //   node archive-reader.mjs [--browser chromium|webkit|firefox] [--build jspi|asyncify]
 
@@ -42,7 +42,7 @@ for (const variant of new Set(runs.map(([, v]) => v))) {
   }
 }
 
-const groups = fs.readdirSync(path.join(buildDir, 'dist/demo')).filter((name) => name.endsWith('.gro')).sort();
+const groups = fs.readdirSync(path.join(buildDir, 'dist/demo/tfe')).filter((name) => name.endsWith('.gro')).sort();
 const server = await serve();
 const results = {};
 const errors = [];
@@ -77,7 +77,7 @@ for (const [name, variant] of runs) {
     const args = ['--cd', '/tfe/'];
     let bytes = 0;
     for (const name of groups) {
-      const response = await fetch(`/demo/${name}`);
+      const response = await fetch(`/demo/tfe/${name}`);
       const { size } = await GameArchives.store(db, name, response.body);
       const where = name === 'SE1_10b.gro' ? `/data/${name}` : `/tfe/${name}`;
       GameArchives.register(where, 'archive-test', name, size);

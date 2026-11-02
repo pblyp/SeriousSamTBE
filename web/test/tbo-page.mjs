@@ -1,12 +1,11 @@
-// The Both Encounters' page (web/build/dist/tbo, see web/shell-tbo), with small made-up
-// installations of both games (no real game data is needed): checks that the page is the
-// version's (names, the two demos offered), takes the two installations as two .zip files picked one
-// after the other or as one .zip with both folders, says what is missing or wrong, puts each
-// installation's files where the engine looks for them (/data, The First Encounter's in
-// /tfe, passed as +cdpath), keeps the group files in pieces in the browser's storage, from
-// where the engine reads them (also on the next visit), keeps them and the options apart
-// from The First Encounter's page, and that The First Encounter's service worker leaves
-// /tbo/ alone.
+// The page (web/build/dist, see web/shell), with small made-up installations of both games (no
+// real game data is needed): checks its names and that it offers the two demos, takes the two
+// installations as two .zip files picked one after the other or as one .zip with both folders,
+// says what is missing or wrong, puts each installation's files where the engine looks for them
+// (/data, The First Encounter's in /tfe, passed as +cdpath), keeps the group files in pieces in
+// the browser's storage, from where the engine reads them (also on the next visit), keeps its
+// files and options under the names they had when the page was at tbo/, and that links to tbo/
+// go to the page.
 //
 //   node tbo-page.mjs [--browser chromium|webkit|firefox]
 
@@ -70,18 +69,10 @@ const results = {};
 const note = (page) => page.textContent('#own-files-note');
 const databases = (page) => page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name).sort());
 
-// The First Encounter's page first, so its service worker is there when /tbo/ is visited
-const tfePage = await context.newPage();
-tfePage.on('pageerror', (e) => errors.push(e.stack || e.message));
-await tfePage.goto(`${server.url}/index.html`);
-await tfePage.evaluate(() => navigator.serviceWorker.ready);
-await tfePage.reload();
-await tfePage.evaluate(() => localStorage.setItem('touchControls', 'on'));
-
 const page = await context.newPage();
 page.on('pageerror', (e) => errors.push(e.stack || e.message));
-await page.goto(`${server.url}/tbo/index.html`);
-results['the page is The Both Encounters\' (names, the two demos, several .zip files can be picked)'] =
+await page.goto(`${server.url}/index.html`);
+results['the page\'s names, the two demos, several .zip files can be picked'] =
   await page.title() === 'Serious Sam: The Both Encounters'
   && (await page.textContent('#panel .subtitle')) === 'The Both Encounters'
   && (await page.textContent('#play-demo')) === 'Play the demos'
@@ -89,12 +80,12 @@ results['the page is The Both Encounters\' (names, the two demos, several .zip f
   && await page.evaluate(() => document.getElementById('game-zip').multiple)
   && (await note(page)).includes('The Second Encounter') && (await note(page)).includes('The First Encounter');
 
-// its options are its own
-results['the options are kept apart from The First Encounter\'s page'] =
+// its options, under the names they had at tbo/
+results['the options are kept as they were at tbo/'] =
   await page.evaluate(() => document.getElementById('touch-mode').value) === 'auto';
 await page.selectOption('#touch-mode', 'off');
-results['the options are kept apart from The First Encounter\'s page'] &&=
-  await page.evaluate(() => localStorage.getItem('tbo.touchControls') === 'off' && localStorage.getItem('touchControls') === 'on');
+results['the options are kept as they were at tbo/'] &&=
+  await page.evaluate(() => localStorage.getItem('tbo.touchControls') === 'off');
 
 // what isn't the games
 await page.setInputFiles('#game-zip', otherZip);
@@ -128,8 +119,8 @@ const files = await page.evaluate(() => {
 results[`each installation's files are where the engine looks for them (${JSON.stringify(files)})`] =
   files.tse && files.tfe && files.base && !files.notNeeded && !files.tfeNotInData && files.inStorage && files.ownScripts;
 
-// kept in the version's own store, The First Encounter's under tfe/: the group files in
-// pieces, the others whole
+// kept in the page's store (as it was at tbo/), The First Encounter's under tfe/: the group
+// files in pieces, the others whole
 const storedKeys = (p, store) => p.evaluate(async (store) => {
   const db = await new Promise((resolve, reject) => {
     const r = indexedDB.open('tbo-own-files');
@@ -145,7 +136,7 @@ const storedKeys = (p, store) => p.evaluate(async (store) => {
 }, store);
 const kept = await storedKeys(page, 'files');
 const pieces = await storedKeys(page, 'chunks');
-results[`the files are kept in the version's own store (${kept.join(', ')}; in pieces: ${pieces.join(', ')})`] =
+results[`the files are kept in the page's store (${kept.join(', ')}; in pieces: ${pieces.join(', ')})`] =
   kept.includes('tfe/Levels/01_Hatshepsut.wld') && !kept.some((k) => k.endsWith('.gro'))
   && pieces.includes('SE1_00.gro#0') && pieces.includes('tfe/1_00c.gro#0')
   && !(await databases(page)).includes('sam-own-files');
@@ -160,7 +151,7 @@ for (const l of log.filter((l) => /arguments|\.gro:/.test(l))) console.log(l);
 results['the engine is started with +cdpath /tfe/ and reads both installations\' group files'] =
   log.some((l) => l.includes('Starting with arguments: +cdpath /tfe/'))
   && log.some((l) => /\/data\/SE1_00\.gro: \d+ files/.test(l)) && log.some((l) => /\/tfe\/1_00c\.gro: \d+ files/.test(l));
-results['its settings and saved games are in its own storage (/tbo-user)'] =
+results['its settings and saved games are where they were at tbo/ (/tbo-user)'] =
   (await databases(page)).includes('/tbo-user') && !(await databases(page)).includes('/user');
 
 // the next visit (the files count as kept once the game has run with them; these made-up
@@ -179,7 +170,7 @@ await page.evaluate(async () => {
 });
 const again = await context.newPage();
 again.on('pageerror', (e) => errors.push(e.stack || e.message));
-await again.goto(`${server.url}/tbo/index.html`);
+await again.goto(`${server.url}/index.html`);
 await again.waitForSelector('#play-own:not([hidden])', { timeout: 10000 });
 await again.click('#play-own');
 await again.waitForSelector('#start:not([hidden])', { timeout: 120000 });
@@ -194,7 +185,7 @@ await again.close();
 
 // files kept by a visit where the game never started with them are deleted the next time
 const unfinished = await context.newPage();
-await unfinished.goto(`${server.url}/tbo/index.html`);
+await unfinished.goto(`${server.url}/index.html`);
 const removedUnfinished = await unfinished.evaluate(async () => {
   // (a set started over an hour ago, never finished: no list of files)
   const db = await new Promise((resolve) => {
@@ -220,7 +211,7 @@ await unfinished.close();
 // one .zip with both folders
 const page2 = await context.newPage();
 page2.on('pageerror', (e) => errors.push(e.stack || e.message));
-await page2.goto(`${server.url}/tbo/index.html`);
+await page2.goto(`${server.url}/index.html`);
 await page2.setInputFiles('#game-zip', bothZip);
 await page2.waitForSelector('#start:not([hidden])', { timeout: 120000 });
 results['one .zip with both folders is taken'] = await page2.evaluate(() => {
@@ -228,17 +219,18 @@ results['one .zip with both folders is taken'] = await page2.evaluate(() => {
   return exists('/data/SE1_00.gro') && exists('/tfe/1_00c.gro');
 });
 
-// network games: the page finds the hub of the server it comes from (its net-hub.json is in tbo/)
+// network games: the page finds the hub of the server it comes from
 results['network games go through the page\'s server'] = await page2.evaluate(() =>
   fetch('net-hub.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).then(({ hub }) => hub === '/hub', () => false));
 
-// The First Encounter's service worker doesn't keep The Both Encounters' files
-const tfeCached = await tfePage.evaluate(async () => {
-  const cache = await caches.open('sam-app');
-  return (await cache.keys()).map((r) => new URL(r.url).pathname);
-});
-results[`The First Encounter's worker leaves /tbo/ alone (${tfeCached.filter((p) => p.includes('/tbo/')).length} of its files cached)`] =
-  tfeCached.length > 0 && !tfeCached.some((p) => p.includes('/tbo/'));
+// links to where the page was before (e.g. a network game's room) go to it
+const moved = await context.newPage();
+await moved.goto(`${server.url}/tbo/?join=K7Q2MX`);
+await moved.waitForURL((url) => !url.pathname.includes('/tbo/'), { timeout: 10000 }).catch(() => {});
+const movedTo = new URL(moved.url());
+results[`links to tbo/ go to the page (${movedTo.pathname}${movedTo.search})`] = movedTo.pathname === '/'
+  && movedTo.search === '?join=K7Q2MX';
+await moved.close();
 
 await browser.close();
 await server.close();
