@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Serious Sam: The First Encounter</title>
+<title>Serious Sam: The Both Encounters</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="icons/icon-192.png">
@@ -24,20 +24,22 @@
   <div id="overlay">
     <div id="panel">
       <h1>Serious Sam</h1>
-      <p class="subtitle">The First Encounter</p>
+      <p class="subtitle">The Both Encounters</p>
 
       <div id="choose">
         <p id="invite" class="invite" hidden></p>
         <button id="play-own" class="primary" type="button" hidden>Play my game files</button>
         <p class="note" id="play-own-note" hidden></p>
-        <button id="play-demo" class="primary" type="button">Play the demo</button>
-        <p class="note" id="play-demo-note">Karnak demo level &middot; about 80&nbsp;MB, downloaded once</p>
+        <button id="play-demo" class="primary" type="button">Play the demos</button>
+        <p class="note" id="play-demo-note">Karnak and Palenque, one after the other &middot; about 200&nbsp;MB,
+          downloaded once</p>
         <label id="own-files" class="secondary" tabindex="0">
           Use my game files&hellip;
-          <input id="game-zip" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
+          <input id="game-zip" type="file" accept=".zip,application/zip,application/x-zip-compressed" multiple hidden>
         </label>
-        <p class="note" id="own-files-note">Zip the folder where <em>The First Encounter</em> is installed
-          and pick the .zip (or drop it, or the folder, here).<br>
+        <p class="note" id="own-files-note">Zip the folders where <em>The Second Encounter</em> and
+          <em>The First Encounter</em> are installed and pick both .zip files (or one .zip with both folders;
+          or drop them here).<br>
           The files stay on this device: they are kept in this browser for next time.</p>
         <div class="options">
           <label class="option">Touch controls
@@ -50,12 +52,12 @@
           <label class="option" id="fullscreen-option"><input id="fullscreen" type="checkbox"> Fullscreen</label>
         </div>
         <details class="about" id="about-demo">
-          <summary>About the demo</summary>
+          <summary>About the demos</summary>
           <p>The game files downloaded here are only those of the official <em>Serious Sam: The First
-            Encounter</em> demo (2001), which, to our knowledge, is freely redistributable. It is the same
-            demo that was given away on magazine discs and download sites and that the Internet Archive hosts
-            today. Game files from your own installation, your settings and your saved games stay on your
-            device: they are never shared.</p>
+            Encounter</em> demo (2001) and <em>Serious Sam: The Second Encounter</em> demo (2001), which, to our
+            knowledge, are freely redistributable. They are the same demos that were given away on magazine discs
+            and download sites and that the Internet Archive hosts today. Game files from your own installations,
+            your settings and your saved games stay on your device: they are never shared.</p>
         </details>
         <p class="purge-row"><button id="install-app" class="link-button" type="button" hidden>Install the app</button>
           <button id="clear-assets" class="link-button" type="button">Clear assets&hellip;</button>

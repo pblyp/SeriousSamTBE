@@ -1,7 +1,7 @@
 {
-  "name": "Serious Sam: The First Encounter",
-  "short_name": "Serious Sam",
-  "description": "Serious Sam: The First Encounter in the browser",
+  "name": "Serious Sam: The Both Encounters",
+  "short_name": "Serious Sam TBO",
+  "description": "Serious Sam: The First and The Second Encounter as one game, in the browser",
   "id": "./",
   "start_url": "./",
   "scope": "./",

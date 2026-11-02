@@ -7,21 +7,19 @@
 // be reached, and a copy of each goes into the cache, which answers when it can't. So the
 // cache holds what the last visit used, all of one version.
 //
-// Not handled here (straight to the network, never cached): the demo's files (demo/...,
-// kept in IndexedDB by demo-download.js), the game data packages (*.data, kept by Emscripten
+// Not handled here (straight to the network, never cached): the demos' files (demo/..., kept
+// in IndexedDB by demo-download.js, apart from their lists), the game data packages (*.data, kept by Emscripten
 // in IndexedDB), net-hub.json (what the page's server offers right now), requests for parts
 // of files, and other sites.
 
-// what differs between the versions of the game sharing this page (see config.js): each
-// version's worker has its own cache
+// what the page plays (see config.js)
 importScripts('config.js');
 const Game = self.GameConfig;
 const CACHE = Game.cache;
 // what the page needs to start, kept from the start: the first visit loads it before this
 // worker takes over (the rest is kept as it is used)
-// (the demos' file lists: The Both Encounters' first one is the site's, outside its folder)
-const DEMO_FILES = Game.demos ? Game.demos.map(({ base }) => `${base}demo-files.json`)
-  : Game.demo ? ['demo-files.json'] : [];
+// (the demos' file lists, see demo-download.js)
+const DEMO_FILES = Game.demos.map(({ folder }) => `demo/${folder}/demo-files.json`);
 const SHELL = [
   './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js', 'archives.js',
   'netplay.js', 'touch.js', 'gamepad.js', 'base-data.js',
@@ -48,12 +46,9 @@ function handled(request) {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return false;
   const scope = new URL(self.registration.scope).pathname;
-  if (!url.pathname.startsWith(scope)) {
-    return DEMO_FILES.some((file) => new URL(file, self.registration.scope).pathname === url.pathname);
-  }
+  if (!url.pathname.startsWith(scope)) return false;
   const path = url.pathname.slice(scope.length);
-  // (the other versions' folders have workers of their own; a first visit there comes here)
-  if (Game.otherVersions.some((folder) => path.startsWith(folder))) return false;
+  if (DEMO_FILES.includes(path)) return true;
   return !path.startsWith('demo/') && !path.endsWith('.data') && path !== 'net-hub.json';
 }
 

@@ -1,12 +1,13 @@
-# Serious Sam: The First Encounter in the browser
+# Serious Sam: The Both Encounters in the browser
 
-The engine compiled to WebAssembly with Emscripten, rendering with WebGL 2.
-It runs the official Karnak demo out of the box, and the full game when the
-player picks their own installation folder, zipped (the files never leave their device).
+The engine compiled to WebAssembly with Emscripten, rendering with WebGL 2: The First
+Encounter and The Second Encounter as one campaign, from the player's installations of both
+games (zipped; the files never leave their device), or out of the box with the two games'
+official demos, Karnak then Palenque.
 
-The Both Encounters (`SamTBO`, at `/tbo/`) plays The First Encounter and The Second
-Encounter as one campaign, from the player's installations of both, or the two games'
-demos, Karnak then Palenque (see below).
+It is `SamTBO`, a copy of `SamTSE` (The Second Encounter's code) with the web version's
+changes and what playing The First Encounter's levels takes. (`SamTFE` has the web version's
+changes too, from before; it isn't built for the web any more.)
 
 ## Building
 
@@ -18,15 +19,15 @@ Requirements: [emsdk](https://emscripten.org/docs/getting_started/downloads.html
 ```sh
 web/build.sh                       # Release build of both variants into web/build/dist
 web/build.sh RelWithDebInfo jspi   # one variant, with DWARF debug info
-web/build.sh Release all all       # The First Encounter, and The Both Encounters in dist/tbo
-web/build.sh Release all tbo       # only The Both Encounters
 ```
 
-The first build downloads the demo (`SeriousSamDemo.exe`) and the 1.05 patch
-from archive.org, extracts them (`fetch_demo_data.sh`) and prepares the data
-(`package_demo.sh`): the demo's files in `demo/` and a list of them
-(`demo-files.json`, by `tools/make_demo_list.mjs`), and a package of this repository's
-game files for players who bring their own.
+The first build downloads The First Encounter's demo (`SeriousSamDemo.exe`) and its 1.05
+patch, and The Second Encounter's demo (`SeriousSamSEDemo.exe`), from archive.org, checked
+against `demo_data.sha256` and `tse_demo_data.sha256` (`fetch_demo_data.sh`,
+`fetch_tse_demo.sh`), and puts them into the site (`package_demo.sh`): each in a folder of
+`demo/` (`tfe/`, `tse/`) with a list of its files (`demo-files.json`, by
+`tools/make_demo_list.mjs`). It also packages the repository's game files that the engine
+needs besides the games' own (`package_base.sh`, `base-data.data`).
 
 `web/build/dist` is a static site: serve it with any web server, e.g.
 
@@ -50,54 +51,48 @@ requests (a demo download that stopped goes on from where it was).
 3. the game is at `https://<user>.github.io/<repository>/`.
 
 All files are below Pages' 100 MB limit (the largest is The Second Encounter demo's 84 MB
-`SEDemo1_00.gro`, in `tbo/demo/`), and everything is loaded with relative URLs.
+`SEDemo1_00.gro`), and everything is loaded with relative URLs. The game was at `tbo/` before:
+`tbo/index.html` sends links there (e.g. to a network game's room) to the page.
 
-## The Both Encounters
-
-`SamTBO` is a copy of `SamTSE` (The Second Encounter's code) with the web version's
-changes and what playing The First Encounter's levels takes; `web/build.sh … tbo` builds
-it into `dist/tbo/`, with the same page (`shell/`) and its own settings
-(`shell-tbo/config.js`, `shell-tbo/manifest.webmanifest`).
+## Both games
 
 - **Two installations.** The player picks a .zip of each game's folder (one after the
   other, or both at once), or one .zip with both folders; the page tells them apart by
-  their group files (`SE1_00*.gro`, `1_00c*.gro`). The Second Encounter's files go to
-  `/data`, The First Encounter's to `/tfe`, which the engine gets as its second data folder
-  (`+cdpath /tfe/`): where both games have a file with the same name, The Second
-  Encounter's is used; The First Encounter's levels, textures and music come from `/tfe`.
+  their group files (`SE1_00*.gro`, `1_00c*.gro`; The Second Encounter's demo, `SEDemo1_00*.gro`,
+  counts as its installation too). The Second Encounter's files go to `/data`, The First
+  Encounter's to `/tfe`, which the engine gets as its second data folder (`+cdpath /tfe/`):
+  where both games have a file with the same name, The Second Encounter's is used; The First
+  Encounter's levels, textures and music come from `/tfe`. What the game doesn't read isn't
+  taken (`installs` in `shell/config.js`).
 - **The First Encounter's levels** are recognized by where they come from, and converted
   when loaded (their keys, weapons given at the start, lighting fixes, map).
-- **The demos.** *Play the demos* downloads The First Encounter's demo (the site's
-  `demo/`, shared with its page: the same IndexedDB copy) and The Second Encounter's
-  (`tbo/demo/`, its own `tbo-demo-` databases), one after the other (`demos` in its
-  config.js). `web/fetch_tse_demo.sh` downloads The Second Encounter's
-  demo from archive.org (checked against `web/tse_demo_data.sha256`) and keeps its group
-  files and levels. The demos' group files are read from their downloaded pieces as
-  they are needed, like an installation's. The engine sees the Palenque demo level without
-  The Second Encounter's levels: New Game starts Karnak, and at its end (after the demo's
-  credits) Palenque follows.
+- **The demos.** *Play the demos* downloads The First Encounter's demo (`demo/tfe/`) and The
+  Second Encounter's (`demo/tse/`), one after the other (`demos` in `shell/config.js`). The
+  engine sees the Palenque demo level without The Second Encounter's levels: New Game starts
+  Karnak, and at its end (after the demo's credits) Palenque follows.
 - **Group files read as they are needed.** Both installations are more than some phones let
-  a page have in memory, so TBO's page (`lazyArchives` in its config.js) doesn't put the
-  `.gro` files in the engine's file system: it streams each one from the .zip into
-  IndexedDB in 1 MB pieces (`shell/archives.js`), and leaves an empty file of that name for
-  the engine to find. The engine reads archives through one reader
+  a page have in memory, so the page doesn't put the `.gro` files in the engine's file system:
+  it streams each one from the .zip into IndexedDB in 1 MB pieces (`shell/archives.js`; the
+  demos' are kept the same way as they are downloaded), and leaves an empty file of that name
+  for the engine to find. The engine reads archives through one reader
   (`Engine/Base/ArchiveReader.h`); in the web build, `Engine/Base/Emscripten/WebArchive.cpp`
   copies what is in the page's cache of pieces (up to 96 MB, those read last) and otherwise
   waits for the pieces from IndexedDB, yielding to the browser as it does every frame (JSPI or
-  Asyncify). Other files (scripts, loose levels) are in memory as before, and so is the music
-  track that is playing, when it is an .mp3 (its decoder reads files itself).
-- **Its own storage**, apart from The First Encounter's page on the same site: game files
-  in `tbo-own-files`, settings and saved games in `/tbo-user`, the start page's options
-  (`tbo.` prefix), its service worker and cache (`tbo-app`), and its network games' room
-  names.
-- **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations;
-  `web/test/archive-reader.mjs` reads every file of the demo's group files from IndexedDB
-  through the engine's reader (a test program, `SamTBO/Sources/Tests/ArchiveReaderTest.cpp`)
-  with a small cache, in both builds; `web/test/tbo-demos.mjs` plays the demos (Karnak, give-all,
-  its end, then Palenque). With real installations,
+  Asyncify). Other files (scripts, loose levels) are in memory, and so is the music track that
+  is playing, when it is an .mp3 (its decoder reads files itself).
+- **Its storage** keeps the names it had at `tbo/` (so what players kept there stays): game
+  files in `tbo-own-files`, settings and saved games in `/tbo-user`, the start page's options
+  (`tbo.` prefix), the service worker's cache (`tbo-app`), and network games' room names
+  (`tbo-` prefix).
+- **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations, and
+  `web/test/ownfiles.mjs` with the two demos as installations; `web/test/archive-reader.mjs`
+  reads every file of The First Encounter's demo's group files from IndexedDB through the
+  engine's reader (a test program, `SamTBO/Sources/Tests/ArchiveReaderTest.cpp`) with a small
+  cache, in both builds; `web/test/tbo-demos.mjs` plays the demos (Custom Level, Karnak,
+  give-all, its end, then Palenque). With real installations,
   `TBO_TSE_ZIP=… TBO_TFE_ZIP=… node web/test/tbo-levels.mjs` starts each level of both games
   and reports what the engine says about it, and lists the files both have with different
-  contents.
+  contents; `tbo-handoff.mjs` plays The First Encounter's end and The Second Encounter's start.
 
 ## How it works
 
@@ -107,39 +102,39 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   The page picks one by feature detection.
 - **One binary.** The game, entity and shader libraries that are normally loaded
   with `dlopen()` are linked in. The engine still looks their symbols up by name,
-  in a table generated at build time (`SamTFE/Sources/cmake/gen_static_symbols.cmake`,
+  in a table generated at build time (`SamTBO/Sources/cmake/gen_static_symbols.cmake`,
   `Engine/Base/Emscripten/StaticDynamicLoader.cpp`).
 - **Rendering.** The engine's OpenGL 1.x code runs unchanged: every `pgl*` function
   it calls is emulated on WebGL 2 by `Engine/Graphics/Emscripten/GL1Emulation.cpp`
   (fixed function state turned into generated shaders, client side vertex arrays
   streamed into buffers, occlusion queries instead of depth buffer reads for lens flares).
-- **Files.** Game data is in `/data` (the demo's files, or the base package plus the
-  player's files), settings and saved games in `/user`, which is stored in IndexedDB.
-  Players give their installation as a .zip of its folder (picking folders doesn't work
-  on phones); `shell/zip.js` reads only the zip's directory up front and unpacks the files
+- **Files.** Game data is in `/data` and `/tfe` (see [Both games](#both-games)), with the base
+  package's files under them; settings and saved games are in `/tbo-user`, which is stored in
+  IndexedDB. Players give their installations as .zip files of their folders (picking folders
+  doesn't work on phones); `shell/zip.js` reads only the zip's directory up front and unpacks the files
   the game needs one by one with the browser's `DecompressionStream`. Dropping the folder
   itself on the page works too. Each `.gro` file is checked on the way in (they are zip
   archives too), so a damaged or cut short one is named before the game starts.
-  The player's files are also kept in IndexedDB (`sam-own-files`), and counted as kept
+  The player's files are also kept in IndexedDB (`tbo-own-files`), and counted as kept
   only once the game has started with them; on later visits *Play my game files* uses them.
 - **When the game can't start**, the page says what happened (with the engine's message
   under "What the game said") and what to try, with *Start over*, *Clear assets* and
   *Clear my data* (both also on the start page). Each deletes, after asking, only its part
-  of what this page keeps. *Clear assets…*: the demo's pieces, the cached base game package
-  and the player's kept game files. *Clear my data…*: settings and saved games (`/user`)
+  of what this page keeps. *Clear assets…*: the demos' pieces, the cached base game package
+  and the player's kept game files. *Clear my data…*: settings and saved games (`/tbo-user`)
   and the start page's options. Other sites on the same address (e.g. a `github.io`
   account's other projects) are left alone.
   Settings are saved whenever the page is hidden, since a tab can be closed at any time.
-- **Demo download.** `shell/demo-download.js` downloads the files that `demo-files.json`
-  lists, from the [mirrors](#demo-mirrors) first, and from the site when they fail, which
+- **Demo download.** `shell/demo-download.js` downloads the files that each demo's
+  `demo-files.json` lists, from the [mirrors](#demo-mirrors) first, and from the site when they fail, which
   keeps the site's bandwidth (GitHub Pages: 100 GB a month) for those who need it. Each file
   is kept in IndexedDB in 1 MB pieces as it arrives (one database per version of the demo
   data, named after a hash of its files; other versions are deleted), so later visits
   download nothing, and a download that stopped goes on from where it was (with a range
   request). Where IndexedDB can't be used, the files are downloaded into memory each visit.
-  Only the official demo's files are downloaded from the site, which to our knowledge may be
+  Only the official demos' files are downloaded from the site, which to our knowledge may be
   freely redistributed; the start page explains this to players. Files from a player's own
-  installation never leave their device.
+  installations never leave their device.
 - **Installing as an app (PWA).** `shell/manifest.webmanifest` (fullscreen, landscape,
   icons made from `SamTFE/serioussam.png`) and the service worker `shell/sw.js` make the
   page installable; Chromium also gets an *Install the app* button on the start page. The
@@ -147,8 +142,8 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   answers when the site can't be reached; when it installs, it also fetches what the page
   needs to start (the first visit loads it before the worker takes over), including the
   engine build this browser uses. It leaves alone what is kept in IndexedDB anyway (the
-  demo's pieces, `*.data` packages), requests for parts of files, `net-hub.json` and
-  other sites. So after one visit the game starts offline, with the demo or the player's
+  demos' pieces, `*.data` packages), requests for parts of files, `net-hub.json` and
+  other sites. So after one visit the game starts offline, with the demos or the player's
   game files kept in the browser. Only on https and localhost; `?nosw` goes without it.
 - **Size.** The game renders at the size of the canvas (`web_fMaxPixelRatio`, 2 by
   default, limits the resolution on high density displays).
@@ -222,16 +217,17 @@ through the page's server (`shell/netplay.js`, `Engine/Base/Emscripten/WebNet.cp
   animation frames, which browsers stop there), so the others aren't stuck when the host
   switches tabs. Browsers slow timers down in background tabs that play no sound, and
   phones may suspend them altogether.
-- The demo has one level for network games: Karnak, cooperative. In the browser the
-  connection settings start at "5mb - Fiber Optics" (the game's defaults are for modems).
+- The demos' levels for network games: Karnak and Palenque (cooperative), Desert Temple and
+  Little Trouble (deathmatch). In the browser the connection settings start at "5mb - Fiber
+  Optics" (the game's defaults are for modems).
 
 ## Demo mirrors
 
-Other web sites can serve the demo, so that players don't use up the site's bandwidth
+Other web sites can serve the demos, so that players don't use up the site's bandwidth
 (and the download goes on when the site is slow). A mirror is a copy of the built
-`web/build/dist/demo/` folder anywhere on the web; its URL is the address of the folder
-that *contains* `demo/` (for `https://cdn.example.org/sam/demo/Levels/…` it is
-`https://cdn.example.org/sam/`). Players' browsers download the files from it (with range
+`web/build/dist/demo/` folder (with `tfe/` and `tse/` in it) anywhere on the web; its URL is
+the address of that copy (for `https://cdn.example.org/sam/demo/tfe/Levels/…` it is
+`https://cdn.example.org/sam/demo/`). Players' browsers download the files from it (with range
 requests to go on with a download that stopped; a file of the wrong size is downloaded
 from the next source), which needs these CORS headers:
 
@@ -248,12 +244,12 @@ For example the CORS policy of an S3 or Cloudflare R2 bucket:
    "AllowedHeaders": ["Range"], "ExposeHeaders": ["Content-Range", "Content-Length", "Accept-Ranges"] }]
 ```
 
-The build lists the mirrors in `demo-files.json` from `DEMO_MIRRORS` (comma separated
-URLs): `DEMO_MIRRORS=https://cdn.example.org/sam/ ./build.sh`. The GitHub Pages workflow
-takes it from the repository variable `DEMO_MIRRORS` (Settings → Secrets and variables →
-Actions → Variables). `?mirror=…` adds mirrors for a visit (for trying one out). A mirror
-must have exactly the files of the build's `demo/` (those `demo-files.json` lists; empty
-files are left out and needn't be there).
+The build lists the mirrors in each demo's `demo-files.json` from `DEMO_MIRRORS` (comma
+separated URLs): `DEMO_MIRRORS=https://cdn.example.org/sam/demo/ web/build.sh`. The GitHub
+Pages workflow takes it from the repository variable `DEMO_MIRRORS` (Settings → Secrets and
+variables → Actions → Variables). `?mirror=…` adds mirrors for a visit (for trying one out).
+A mirror must have exactly the files of the build's `demo/` (those the `demo-files.json`
+files list; empty files are left out and needn't be there).
 
 ## Page options
 
@@ -261,7 +257,7 @@ files are left out and needn't be there).
 
 | Parameter | |
 |---|---|
-| `autostart` | play the demo without clicks |
+| `autostart` | play the demos without clicks |
 | `log` | show the engine's console output on the page |
 | `args=+level%20Levels/KarnakDemo.wld` | command line |
 | `exec=snd_iFormat=2;` | console commands to run at startup |
@@ -285,27 +281,30 @@ cd web/test && npm install && npx playwright install chromium firefox webkit
 npm test              # all of the following
 node smoke.mjs        # plays Karnak in Chromium (both builds), Firefox and WebKit
 node persistence.mjs  # settings survive reloading the page
-node ownfiles.mjs     # "Use my game files": zips made in several ways, broken game files, clearing stored data (--browser webkit)
+node ownfiles.mjs     # "Use my game files" (the demos as installations): zips made in several ways, broken game files, clearing stored data (--browser webkit)
 node touch.mjs        # touch screen controls (--size 844x390 for a phone)
 node gamepad.mjs      # gamepads (a stand-in for the Gamepad API) and aim assist
 node mobile.mjs       # phone players' path on an emulated Android phone and iPhone
 node pwa.mjs          # installable app: manifest, service worker, starting offline
-node demo-download.mjs  # demo download: from the site, from IndexedDB, on after it stopped, from mirrors
+node demo-download.mjs  # the demos' download: from the site, from IndexedDB, on after it stopped, from mirrors
 node netplay.mjs      # network games: hosting, joining by code, leaving, a site without a hub
 node netplay-browsers.mjs  # network games between WebKit, Firefox and Chromium
+node tbo-page.mjs     # the page with made-up installations of both games
+node archive-reader.mjs  # the engine's reader of group files kept in IndexedDB
+node tbo-demos.mjs    # the demos: Custom Level, Karnak, give-all, its end, then Palenque (--browser webkit)
 node escape.mjs       # Escape with the mouse captured (opens a browser window; not part of npm test)
 node run.mjs --args "+level Levels/KarnakDemo.wld" --seconds 30 --shots 10,20 --out /tmp/shots
 node demo-frames.mjs --frames 30,90 --native <native>/ScreenShots   # compare with a native build
-                      # (needs the recorded demos, which the packaged demo leaves out)
+                      # (needs recorded demos, which the packaged demos leave out)
 ```
 
 `run.mjs` also profiles (`--profile 20,30`, use `--build asyncify`: Chrome doesn't
 attribute WebAssembly running under JSPI) and counts WebGL calls (`--glstats`). The tests
-download the demo from the local server.
+download the demos from the local server.
 
 ## Known differences
 
-- The game starts in the menu, without the intro flyover and the demos.
+- The game starts in the menu, without the intro flyover and the recorded demos.
 - No LAN or internet server lists: network games are joined by room code.
 - Demos recorded with other builds desynchronize after a while (floating point
   differences change the simulation), as they do between native builds.

@@ -1,13 +1,14 @@
 'use strict';
 
-// Downloads the demo's game files, from mirrors (other web sites with a copy of demo/...) and
+// Downloads a demo's game files, from mirrors (other web sites with a copy of its folder) and
 // else from this site, and keeps them in IndexedDB: the next visit downloads nothing, and a
 // download that stopped goes on from where it was. Each file is kept in 1 MB pieces (keyed
 // [path, index] in the 'chunks' store, as the player's own group files are, see archives.js),
 // so a page that reads group files as they are needed reads them from there.
 //
-// demo-files.json (web/tools/make_demo_list.mjs) lists the files, the version of the demo data
-// (one IndexedDB database per version: other versions are deleted) and the mirrors.
+// The demo's folder has its files and demo-files.json (web/tools/make_demo_list.mjs), which lists
+// them, the version of the demo data (one IndexedDB database per version: other versions are
+// deleted) and the mirrors (each the address of a copy of the folder).
 //
 // Where IndexedDB can't be used, the files are downloaded into memory, each visit.
 
@@ -93,9 +94,9 @@
     return response;
   }
 
-  // where a site's files are (a folder with demo/... in it), ending in a slash
-  const siteUrl = (url) => new URL('.', new URL(url.replace(/\/?$/, '/'), location.href)).href;
-  const fileUrl = (base, path) => new URL(`demo/${path.split('/').map(encodeURIComponent).join('/')}`, base).href;
+  // where a source's copy of the demo's folder is, ending in a slash
+  const folderUrl = (url) => new URL(url.replace(/\/?$/, '/'), location.href).href;
+  const fileUrl = (base, path) => new URL(path.split('/').map(encodeURIComponent).join('/'), base).href;
 
   // the rest of a file (from byte `from`, a piece's start) from one source, into its pieces:
   // how many bytes are kept then. onBytes(n, at) is called as they arrive (at: how much of the
@@ -180,15 +181,14 @@
   }
 
   // the demo's files as [{ path, size, read() -> Promise<ArrayBuffer>, pieces: { db, name } }]
-  //   base:       the folder with the demo (demo-files.json, demo/), relative to the page ('' for
-  //               its own folder)
+  //   base:       the demo's folder (its files and demo-files.json), relative to the page
   //   prefix:     the start of its IndexedDB databases' names (one demo's own)
   //   mirrors:    more web sites with the files, besides the ones the build lists
   //   onProgress: called with the fraction done
-  async function download({ base = '', prefix = DB_PREFIX, mirrors = [], onProgress = () => {}, log = () => {} } = {}) {
+  async function download({ base, prefix = DB_PREFIX, mirrors = [], onProgress = () => {}, log = () => {} } = {}) {
     const info = await (await fetchOk(`${base}demo-files.json`)).json();
-    const site = siteUrl(base || '.');
-    mirrors = [...new Set([...(info.mirrors || []), ...mirrors].map(siteUrl))].filter((url) => url !== site);
+    const site = folderUrl(base);
+    mirrors = [...new Set([...(info.mirrors || []), ...mirrors].map(folderUrl))].filter((url) => url !== site);
     const sources = [...mirrors, site];
     if (navigator.storage && navigator.storage.persist) {
       navigator.storage.persist().catch(() => {});

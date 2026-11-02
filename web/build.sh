@@ -1,27 +1,22 @@
 #!/bin/bash
-# Builds the web version of Serious Sam: The First Encounter into web/build/dist, and The Both
-# Encounters (SamTBO: both games' levels, from the player's two installations) into
-# web/build/dist/tbo.
+# Builds the web version, Serious Sam: The Both Encounters (SamTBO: both games' levels, from the
+# player's two installations or both games' demos), into web/build/dist.
 #
-#   web/build.sh [Release|RelWithDebInfo|Debug] [jspi|asyncify|all] [tfe|tbo|all]
+#   web/build.sh [Release|RelWithDebInfo|Debug] [jspi|asyncify|all]
 #
-# Needs an activated emsdk (source <emsdk>/emsdk_env.sh), cmake, ninja, flex, bison and node.
-# The demo data is fetched and packaged on the first run (see fetch_demo_data.sh).
+# Needs an activated emsdk (source <emsdk>/emsdk_env.sh), cmake, ninja, flex, bison, node, rsync
+# and 7-Zip. The demos are fetched and put into the site on the first run (see package_demo.sh).
 set -euo pipefail
 
 WEB_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$WEB_DIR")"
-SRC_DIR="$REPO_DIR/SamTFE/Sources"
+SRC_DIR="$REPO_DIR/SamTBO/Sources"
 BUILD_DIR="$WEB_DIR/build"
 DIST_DIR="$BUILD_DIR/dist"
 BUILD_TYPE="${1:-Release}"
 VARIANTS="${2:-all}"
 if [ "$VARIANTS" = "all" ]; then
   VARIANTS="jspi asyncify"
-fi
-GAMES="${3:-tfe}"
-if [ "$GAMES" = "all" ]; then
-  GAMES="tfe tbo"
 fi
 
 if ! command -v emcmake >/dev/null; then
@@ -34,64 +29,32 @@ for d in /opt/homebrew/opt/bison/bin /opt/homebrew/opt/flex/bin /usr/local/opt/b
 done
 
 # 1. the entity class compiler runs on the build machine
-NATIVE_DIR="$BUILD_DIR/ecc"
-cmake -S "$SRC_DIR" -B "$NATIVE_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DTFE=TRUE >/dev/null
-cmake --build "$NATIVE_DIR" --target ecc
-ECC="$NATIVE_DIR/ecc"
+NATIVE_DIR="$BUILD_DIR/ecc-tbo"
+cmake -S "$SRC_DIR" -B "$NATIVE_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release >/dev/null
+cmake --build "$NATIVE_DIR" --target ecc-tbo
+ECC="$NATIVE_DIR/ecc-tbo"
 
 # 2. the engine, once per way of yielding to the browser
-#    (tfe: SamTFE into dist; tbo: SamTBO into dist/tbo, its page with its own config.js)
-for game in $GAMES; do
-  case "$game" in
-    tfe) src="$SRC_DIR"; dist="$DIST_DIR"; prefix="wasm"; target="SeriousSam"; engine="serioussam" ;;
-    tbo) src="$REPO_DIR/SamTBO/Sources"; dist="$DIST_DIR/tbo"; prefix="wasm-tbo"; target="SeriousSamTBO"; engine="serioussamtbo" ;;
-    *) echo "Unknown game: $game (tfe, tbo or all)" >&2; exit 1 ;;
-  esac
-  mkdir -p "$dist"
-  for variant in $VARIANTS; do
-    out="$BUILD_DIR/$prefix-$variant"
-    emcmake cmake -S "$src" -B "$out" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTFE=TRUE \
-      -DECC="$ECC" -DWEB_ASYNC="$(echo "$variant" | tr a-z A-Z)" >/dev/null
-    cmake --build "$out" --target "$target"
-    mkdir -p "$dist/$variant"
-    cp "$out/$engine.js" "$out/$engine.wasm" "$dist/$variant/"
-  done
-  # the page (the same for both, apart from the version's own files)
-  cp -R "$WEB_DIR/shell/"* "$dist/"
-  if [ "$game" = "tbo" ]; then
-    cp -R "$WEB_DIR/shell-tbo/"* "$dist/"
-  fi
-  # (what earlier builds put there for WebTorrent and WebRTC)
-  rm -f "$dist"/demo.torrent "$dist"/demo-page.torrent "$dist"/demo-torrent.json "$dist"/webtorrent.min.js \
-    "$dist"/netplay-signal.js
+for variant in $VARIANTS; do
+  out="$BUILD_DIR/wasm-tbo-$variant"
+  emcmake cmake -S "$SRC_DIR" -B "$out" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+    -DECC="$ECC" -DWEB_ASYNC="$(echo "$variant" | tr a-z A-Z)" >/dev/null
+  cmake --build "$out" --target SeriousSamTBO
+  mkdir -p "$DIST_DIR/$variant"
+  cp "$out/serioussamtbo.js" "$out/serioussamtbo.wasm" "$DIST_DIR/$variant/"
 done
 
-# 3. the game data: TBO's base package (its players provide all the rest), and The Second
-#    Encounter's demo, which its page plays after The First Encounter's (that is the site's,
-#    shared with The First Encounter's page)
-if [[ " $GAMES " == *" tbo "* ]]; then
-  "$WEB_DIR/package_base.sh" "$DIST_DIR/tbo" SamTBO >/dev/null
-  if [ ! -d "$BUILD_DIR/tse-demo-data" ]; then
-    "$WEB_DIR/fetch_tse_demo.sh"
-  fi
-  # (without empty files, see package_demo.sh)
-  rsync -a --delete --delete-excluded --min-size=1 --exclude '.DS_Store' "$BUILD_DIR/tse-demo-data/" "$DIST_DIR/tbo/demo/"
-  DEMO_MIRRORS= node "$WEB_DIR/tools/make_demo_list.mjs" "$DIST_DIR/tbo" >/dev/null
-fi
+# the page (tbo/, where it was before, only sends links there now), without what earlier builds
+# put there: The First Encounter's own page and engine, the page in tbo/, and the libraries and
+# torrents for WebTorrent and WebRTC
+rm -rf "$DIST_DIR/tbo"
+rm -f "$DIST_DIR"/{jspi,asyncify}/serioussam.{js,wasm} "$DIST_DIR"/demo-files.json "$DIST_DIR"/demo.torrent \
+  "$DIST_DIR"/demo-page.torrent "$DIST_DIR"/demo-torrent.json "$DIST_DIR"/webtorrent.min.js "$DIST_DIR"/netplay-signal.js
+cp -R "$WEB_DIR/shell/"* "$DIST_DIR/"
 
-# and TFE's base package and demo (DEMO_MIRRORS: other sites with a copy of demo/, see README.md)
-if [[ " $GAMES " != *" tfe "* ]]; then
-  echo "Built into $DIST_DIR"
-  exit 0
-fi
-if [ ! -f "$DIST_DIR/demo-files.json" ] || [ ! -f "$DIST_DIR/base-data.data" ]; then
-  if [ ! -d "$BUILD_DIR/demo-data" ]; then
-    "$WEB_DIR/fetch_demo_data.sh"
-  fi
-  "$WEB_DIR/package_demo.sh" "$DIST_DIR"
-else
-  # (the demo is packaged already: its list again, in case the mirrors changed)
-  node "$WEB_DIR/tools/make_demo_list.mjs" "$DIST_DIR" >/dev/null
-fi
+# 3. the game data: the repository's files that the engine needs besides the games' own (its
+#    players' or the demos'), and the demos
+"$WEB_DIR/package_base.sh" "$DIST_DIR" SamTBO >/dev/null
+"$WEB_DIR/package_demo.sh" "$DIST_DIR" >/dev/null
 
 echo "Built into $DIST_DIR"

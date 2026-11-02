@@ -2,8 +2,8 @@
 
 // The game's group files (.gro, zip archives) kept in the browser's storage in pieces, and
 // read from there while the game runs (see Engine/Base/Emscripten/WebArchive.cpp in SamTBO),
-// so they needn't be in memory: The Both Encounters' (config.js: lazyArchives) two
-// installations are more than some phones let a page have.
+// so they needn't be in memory: the two games' installations are more than some phones let a
+// page have.
 //
 // An archive's pieces (CHUNK_SIZE bytes; ArrayBuffers, as WebKit doesn't store Blobs in some
 // contexts) are in the 'chunks' store of the game files' database, keyed [name, index] (a

@@ -1,38 +1,39 @@
-## Serious Sam Classic: The First Encounter in the browser
+## Serious Sam Classic: The Both Encounters in the browser
 [![Web version](https://github.com/pblyp/SeriousSamClassic/actions/workflows/web-pages.yml/badge.svg)](https://github.com/pblyp/SeriousSamClassic/actions/workflows/web-pages.yml)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
-Serious Engine 1.10 and *Serious Sam: The First Encounter*, compiled to WebAssembly and
-rendering with WebGL 2, playable in a web browser on computers and phones.
+Serious Engine 1.10 compiled to WebAssembly and rendering with WebGL 2: *Serious Sam: The
+First Encounter* and *Serious Sam: The Second Encounter* as one campaign (The Both Encounters),
+playable in a web browser on computers and phones.
 
 **Play it: <https://pblyp.github.io/SeriousSamClassic/>**
 
-- **The demo, out of the box.** The official Karnak demo level (about 80 MB) is downloaded
-  once and kept in the browser.
-- **The full game, with your own copy.** Zip the folder where *The First Encounter* is
-  installed and pick the .zip on the start page. Your files never leave your device; they
-  are kept in the browser, so next time *Play my game files* starts the game without the .zip.
+- **One campaign.** It runs The Second Encounter's code, which also plays The First
+  Encounter's levels: when they end, its credits roll and The Second Encounter's first level
+  follows, with your weapons. Both games' deathmatch maps are there too (e.g. Desert Temple),
+  with The Second Encounter's weapons.
+- **The demos, out of the box.** The official demos of both games (Karnak, then Palenque;
+  about 200 MB) are downloaded once and kept in the browser.
+- **The full games, with your own copies.** Zip the folders where both games are installed
+  and pick the two .zip files (or one with both folders) on the start page. Your files never
+  leave your device; they are kept in the browser, so next time *Play my game files* starts
+  the game without the .zip files. They are read from the browser's storage as they are
+  needed, so both games fit on phones and tablets.
 - **Network games.** The player who starts a game gets a room code and a link to send to
   the others. The games go through the page's server, when it can pass them on (the
   included server can; GitHub Pages can't).
 - **Touch screens.** Phones and tablets get on-screen controls: an analog stick under the
   left thumb, dragging on the right to look, and buttons.
 - **Settings and saved games** stay in the browser. *Clear my data* on the start page
-  removes them; *Clear assets* removes the downloaded demo and your kept game files instead.
-- **The Both Encounters** (`/tbo/`): *The First Encounter* and *The Second Encounter* as one
-  campaign, from your installations of both games (two .zip files, or one with both folders).
-  It runs The Second Encounter's code, which also plays The First Encounter's levels: when
-  they end, its credits roll and The Second Encounter's first level follows. Their
-  deathmatch maps are there too (e.g. Desert Temple), with The Second Encounter's weapons.
-  Without the games, it plays both games' demos the same way: Karnak, then Palenque.
-  The game files are read from the browser's storage as they are needed, so both games fit
-  on phones and tablets.
+  removes them; *Clear assets* removes the downloaded demos and your kept game files instead.
 
 It runs in current Chrome, Edge, Firefox and Safari (desktop, Android and iOS).
 
 This is a fork of [SeriousSamClassic](https://github.com/tx00100xt/SeriousSamClassic)
 (the Linux, BSD and macOS port of Croteam's open source Serious Engine). The web version
-is in the `web-port` branch; for native builds of both games, see the original repository.
+is in the `web-port` branch, in its own source tree, `SamTBO` (a copy of `SamTSE` with the web
+version's changes, and what playing The First Encounter's levels takes); for native builds of
+both games, see the original repository.
 
 Playing
 -------
@@ -50,14 +51,15 @@ Playing
 - **Aim assist:** shots go to an enemy next to the crosshair. It is on with touch controls
   or a gamepad, and can be switched on or off for good in Options → Players and
   controls → Customize controls → Aim assist.
-- **Your own game:** choose *Use my game files…* and pick a .zip of the installation folder
-  (with its `.gro` files). On a computer you can also drop the folder itself on the page.
+- **Your own games:** choose *Use my game files…* and pick a .zip of each game's installation
+  folder (with their `.gro` files). On a computer you can also drop the folders themselves on
+  the page.
 - **As an app:** install it from the browser's menu (or the start page's *Install the app*
   button). After one visit it also starts offline.
 - **Network games:** in the game's menu, Network → Start. A badge shows the room code with
   *Copy link* and *Share*. The others open the link, or type the code under Network →
-  Join → Specify server. The demo has a cooperative level (Karnak) and a deathmatch
-  level (Desert Temple). They need the page opened from a server that passes games on (see
+  Join → Specify server. The demos have cooperative levels (Karnak, Palenque) and
+  deathmatch levels (e.g. Desert Temple). They need the page opened from a server that passes games on (see
   [Running it yourself](#running-it-yourself)).
 
 Running it yourself
@@ -91,19 +93,16 @@ git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
 source ~/emsdk/emsdk_env.sh
 
 web/build.sh            # the site, in web/build/dist
-web/build.sh Release all all   # with The Both Encounters, in web/build/dist/tbo
 ```
 
-The first build takes a while. It downloads the official demo and the 1.05 patch from
-archive.org (checked against `web/demo_data.sha256`; with The Both Encounters, also The
-Second Encounter's demo, checked against `web/tse_demo_data.sha256`), builds the entity compiler for the
-build machine, and builds the engine twice. Browsers with JavaScript Promise Integration
-get one build, the others an Asyncify build.
+The first build takes a while. It downloads both games' official demos and The First
+Encounter's 1.05 patch from archive.org (checked against `web/demo_data.sha256` and
+`web/tse_demo_data.sha256`), builds the entity compiler for the build machine, and builds
+the engine twice. Browsers with JavaScript Promise Integration get one build, the others an
+Asyncify build.
 
-The Both Encounters is its own source tree, `SamTBO` (a copy of `SamTSE` with the web
-version's changes, and what playing The First Encounter's levels takes), so `SamTFE` and
-`SamTSE` stay as they are. It builds for the desktop too, like the other two: run it with
-The Second Encounter's files in its folder and `+cdpath <The First Encounter's folder>`.
+`SamTBO` builds for the desktop too, like `SamTFE` and `SamTSE` (which stay as they are): run
+it with The Second Encounter's files in its folder and `+cdpath <The First Encounter's folder>`.
 
 ### Serving it
 
@@ -164,9 +163,9 @@ License
 
 * Serious Engine is licensed under the GNU GPL v2 (see LICENSE file).
 * amp11lib is licensed under the GNU GPL v2 (see amp11lib/COPYING file).
-* *Serious Sam* and the *Serious Sam: The First Encounter* demo are © Croteam. The page only
-  shares the official demo, which to our knowledge is freely redistributable. The full
-  game needs your own copy.
+* *Serious Sam* and the *Serious Sam: The First Encounter* and *The Second Encounter* demos are
+  © Croteam. The page only shares the official demos, which to our knowledge are freely
+  redistributable. The full games need your own copies.
 
 ### Note:
 The following applies only to the for Windows build. Because none of the following is used when building under (Linux, *BSD, macOS) systems.

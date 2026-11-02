@@ -1,6 +1,6 @@
 'use strict';
 
-// Page logic for the web build of Serious Sam: The First Encounter.
+// Page logic for the web build of Serious Sam: The Both Encounters.
 //
 // Query parameters:
 //   autostart  play the demo without waiting for clicks (for automated tests)
@@ -23,7 +23,7 @@
   // script with "fullscreen" in its name): the game works without it
   const PageFullscreen = window.PageFullscreen
     || { supported: false, active: () => false, enter() {}, exit() {}, toggle() {} };
-  // what differs between the versions of the game that share this page (see config.js)
+  // what the page plays (see config.js)
   const Game = window.GameConfig;
 
   const canvas = document.getElementById('canvas');
@@ -47,29 +47,6 @@
 
   const showLog = params.has('log');
   logEl.hidden = !showLog;
-
-  // the version's names, and what it offers
-  document.title = Game.title;
-  document.querySelector('#panel .subtitle').textContent = Game.subtitle;
-  const multipleInstalls = Game.installs.length > 1;
-  if (!Game.demo) {
-    for (const id of ['play-demo', 'play-demo-note', 'about-demo']) document.getElementById(id).hidden = true;
-    ownFilesLabel.classList.replace('secondary', 'primary');
-  }
-  // (several demos, played one after the other)
-  if (Game.demos) {
-    playDemoButton.textContent = 'Play the demos';
-    document.getElementById('play-demo-note').textContent = Game.demosNote;
-    document.querySelector('#about-demo summary').textContent = 'About the demos';
-    document.querySelector('#about-demo p').innerHTML = Game.demosAbout;
-  }
-  if (multipleInstalls) {
-    const names = Game.installs.map(({ name }) => `<em>${name}</em>`).join(' and ');
-    ownFilesNote.innerHTML = `Zip the folders where ${names} are installed and pick both .zip files `
-      + '(or one .zip with both folders; or drop them here).<br>'
-      + 'The files stay on this device: they are kept in this browser for next time.';
-    zipInput.multiple = true;
-  }
 
   // all engine output, also read by the automated tests
   const engineLog = [];
@@ -125,15 +102,10 @@
         + '(or clear the assets first). If that doesn\'t help, clear your data: settings saved earlier '
         + 'can keep the game from starting.';
     }
-    if (usingOwnFiles && multipleInstalls) {
+    if (usingOwnFiles) {
       return `Check that the .zip files are of the folders where ${Game.installs.map(({ name }) => name).join(' and ')} `
         + 'are installed (with their .gro files), and that they are complete: zip the folders again, or pick other '
         + '.zip files. If that doesn\'t help, clear your data: settings saved by an earlier attempt can keep the game from starting.';
-    }
-    if (usingOwnFiles) {
-      return 'Check that the .zip is of the folder where Serious Sam: The First Encounter is installed '
-        + '(with its .gro files), and that it is complete: zip the folder again, or pick another .zip. '
-        + 'If that doesn\'t help, clear your data: settings saved by an earlier attempt can keep the game from starting.';
     }
     return 'Try again. If it keeps happening, clear the assets (the download may be damaged), '
       + 'or your data (settings saved earlier can keep the game from starting).';
@@ -179,12 +151,12 @@
       if (this.db) return Promise.resolve(this.db);
       return new Promise((resolve, reject) => {
         // (with the version's group files in pieces, see archives.js)
-        const request = indexedDB.open(OWN_FILES_DB, Game.lazyArchives ? 2 : 1);
+        const request = indexedDB.open(OWN_FILES_DB, 2);
         request.onupgradeneeded = () => {
           const db = request.result;
           if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'path' });
           if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
-          if (Game.lazyArchives && !db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
+          if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
         };
         request.onsuccess = () => {
           this.db = request.result;
@@ -257,7 +229,7 @@
       + 'again, and your .zip picked again, the next time). Your settings and saved games are kept.');
     if (!ok) return false;
     const names = ['EM_PRELOAD_CACHE', OWN_FILES_DB];
-    const demoPrefixes = Game.demos ? Game.demos.map(({ prefix }) => prefix) : ['sam-demo-'];
+    const demoPrefixes = Game.demos.map(({ prefix }) => prefix);
     if (indexedDB.databases) {
       for (const { name } of await indexedDB.databases()) {
         if (name && demoPrefixes.some((prefix) => name.startsWith(prefix))) names.push(name);
@@ -374,35 +346,6 @@
 
   // what macOS adds to archives and folders
   const isMacJunk = (path) => /(^|\/)(__MACOSX\/|\._|\.DS_Store$)/.test(path);
-
-  // find the installation's directory (the one with the .gro files) and make paths relative to it
-  function selectGameFiles(entries) {
-    entries = entries.filter(({ path }) => !isMacJunk(path));
-    let root = null;
-    for (const { path } of entries) {
-      if (/\.gro$/i.test(path)) {
-        const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
-        if (root === null || dir.length < root.length) {
-          root = dir;
-        }
-      }
-    }
-    if (root === null) {
-      throw new Error('No game files (*.gro) were found in there.');
-    }
-    const files = entries
-      .filter(({ path }) => path.startsWith(root))
-      .map((entry) => ({ ...entry, path: entry.path.slice(root.length) }))
-      .filter(({ path }) => isNeeded(path));
-    const groups = files.filter(({ path }) => /^[^/]+\.gro$/i.test(path)).map(({ path }) => path.toLowerCase());
-    if (!groups.some((name) => name.startsWith('1_00c'))) {
-      if (groups.some((name) => name.startsWith('se1_00'))) {
-        throw new Error('That is The Second Encounter. This page plays The First Encounter.');
-      }
-      throw new Error('That doesn\'t look like a Serious Sam: The First Encounter installation.');
-    }
-    return files;
-  }
 
   // the files of several installations (each game's, see config.js), told apart by their
   // group files; each file gets the root its installation goes to. Throws, with what is
@@ -553,7 +496,7 @@
       const fullPath = `${file.root || '/data/'}${path}`;
       FS.mkdirTree(fullPath.slice(0, fullPath.lastIndexOf('/')));
       // a demo's, downloaded: read from its pieces too
-      if (Game.lazyArchives && file.pieces && /\.gro$/i.test(path)) {
+      if (file.pieces && /\.gro$/i.test(path)) {
         FS.writeFile(fullPath, new Uint8Array(0));
         GameArchives.register(fullPath, file.pieces.db, file.pieces.name, size);
         doneBytes += size;
@@ -566,7 +509,7 @@
         doneBytes += size;
         continue;
       }
-      if (Game.lazyArchives && keeping && file.stream && /\.gro$/i.test(path)) {
+      if (keeping && file.stream && /\.gro$/i.test(path)) {
         try {
           const kept = await GameArchives.store(await OwnFiles.open(), storeKey(file), await file.stream(),
             22 + 65535, (bytes) => progress(doneBytes + bytes));
@@ -713,7 +656,7 @@
   if (joinCode) {
     const invite = document.getElementById('invite');
     invite.textContent = `You are invited to a network game (room ${NetPlay.showCode(joinCode)}). `
-      + (Game.demo ? 'Start the demo, or use your game files, to join it.' : 'Use your game files to join it.');
+      + 'Start the demos, or use your game files, to join it.';
     invite.hidden = false;
   }
 
@@ -750,9 +693,8 @@
   }
   // the host's game checks that the players have the same files: say what to do when not
   function explainFilesRefused() {
-    const versions = multipleInstalls ? 'versions of both games' : 'version of the game';
     updateNetBadge({ state: 'failed', error: 'The host\'s game refused your game files ("Wrong CRC check."): '
-      + `everyone in a network game needs the same ${versions} (e.g. all from GOG or all from Steam, `
+      + 'everyone in a network game needs the same versions of both games (e.g. all from GOG or all from Steam, '
       + 'with the same patches).' });
   }
   document.getElementById('net-hide').addEventListener('click', () => {
@@ -874,18 +816,18 @@
     }
   }
 
-  // the demos, one after the other (The Both Encounters': The First Encounter's, from the site's
-  // folder, which its page shares, then The Second Encounter's), and the version's base package
+  // the demos, one after the other (The First Encounter's, then The Second Encounter's, from
+  // mirrors and this site, see demo-download.js), and the base package
   function loadDemos() {
     load(async () => {
       const list = (name) => (params.get(name) ? params.get(name).split(',').filter((u) => u) : null);
       dataFiles = [];
       for (const [i, demo] of Game.demos.entries()) {
         const files = await DemoDownload.download({
-          base: demo.base,
+          base: `demo/${demo.folder}/`,
           prefix: demo.prefix,
-          // (more mirrors: The First Encounter's demo's)
-          mirrors: (demo.prefix === 'sam-demo-' && list('mirror')) || [],
+          // (a mirror has a copy of the site's demo/ folder)
+          mirrors: (list('mirror') || []).map((url) => new URL(`${demo.folder}/`, url.replace(/\/?$/, '/')).href),
           log,
           onProgress(fraction) {
             const done = (i + fraction) / Game.demos.length;
@@ -905,30 +847,8 @@
     });
   }
 
-  // the demo comes from mirrors and this site (see demo-download.js)
-  function loadDemo() {
-    if (Game.demos) {
-      loadDemos();
-      return;
-    }
-    load(async () => {
-      const list = (name) => (params.get(name) ? params.get(name).split(',').filter((u) => u) : null);
-      dataFiles = await DemoDownload.download({
-        mirrors: list('mirror') || [],
-        log,
-        onProgress(fraction) {
-          setStatus(`Downloading game data… ${Math.round(fraction * 100)}%`, fraction);
-        },
-      }).catch((e) => {
-        // (it was never downloaded, or not completely)
-        if (!navigator.onLine) throw new Error('You are offline: the demo can be downloaded once you are online.');
-        throw e;
-      });
-    });
-  }
-
-  // with several installations: those picked so far (each .zip is picked on its own on some
-  // devices), until all are there
+  // the installations picked so far (each .zip is picked on its own on some devices), until all
+  // are there
   let pickedEntries = [];
 
   // the player's game folder, zipped (or the folder itself, dropped on the page)
@@ -937,7 +857,7 @@
       if (entries.length === 1 && /\.zip$/i.test(entries[0].path)) {
         ownFilesNote.textContent = 'Reading the .zip…';
         entries = await ZipReader.list(entries[0].file);
-      } else if (multipleInstalls && entries.some(({ path }) => /\.zip$/i.test(path))) {
+      } else if (entries.some(({ path }) => /\.zip$/i.test(path))) {
         // (several .zip files: each one's files in a folder of its own)
         ownFilesNote.textContent = 'Reading the .zip files…';
         const all = [];
@@ -950,19 +870,15 @@
         }
         entries = all;
       }
-      if (multipleInstalls) {
-        // (those picked before, in folders of their own)
-        const pickedBefore = pickedEntries.map((entry) => ({ ...entry, path: `before/${entry.path}` }));
-        try {
-          dataFiles = selectInstalls([...pickedBefore, ...entries]);
-        } catch (e) {
-          if (e.found) pickedEntries = e.found;
-          throw e;
-        }
-        pickedEntries = [];
-      } else {
-        dataFiles = selectGameFiles(entries);
+      // (those picked before, in folders of their own)
+      const pickedBefore = pickedEntries.map((entry) => ({ ...entry, path: `before/${entry.path}` }));
+      try {
+        dataFiles = selectInstalls([...pickedBefore, ...entries]);
+      } catch (e) {
+        if (e.found) pickedEntries = e.found;
+        throw e;
       }
+      pickedEntries = [];
       usingOwnFiles = true;
       ownFilesFromStore = false;
     } catch (e) {
@@ -1003,10 +919,6 @@
     // the demo is the main choice only when there are no kept files
     playDemoButton.classList.toggle('primary', !meta);
     playDemoButton.classList.toggle('secondary', !!meta);
-    if (!Game.demo) {
-      ownFilesLabel.classList.toggle('primary', !meta);
-      ownFilesLabel.classList.toggle('secondary', !!meta);
-    }
     if (meta) {
       playOwnNote.textContent = `Kept in this browser · about ${Math.max(1, Math.round(meta.bytes / 1048576))} MB`;
     }
@@ -1015,7 +927,7 @@
 
   // ---------------------------------------------------------------- page events
 
-  playDemoButton.addEventListener('click', loadDemo);
+  playDemoButton.addEventListener('click', loadDemos);
   playOwnButton.addEventListener('click', useStoredFiles);
   startButton.addEventListener('click', start);
   document.getElementById('start-over').addEventListener('click', () => location.reload());
@@ -1171,6 +1083,6 @@
   });
 
   if (params.has('autostart')) {
-    loadDemo();
+    loadDemos();
   }
 })();
