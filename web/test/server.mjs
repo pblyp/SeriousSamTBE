@@ -89,9 +89,15 @@ export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false 
         .end(JSON.stringify({ ...(relay ? { path: SIGNAL_PATH } : {}), ...(hub ? { hub: HUB_PATH } : {}) }));
       return;
     }
-    const file = path.join(root, urlPath === '/' ? 'index.html' : urlPath);
+    // (a folder's page is its index.html, as on GitHub Pages: e.g. tbo/)
+    const file = path.join(root, urlPath.endsWith('/') ? `${urlPath}index.html` : urlPath);
     if (!file.startsWith(root)) {
       res.writeHead(403).end();
+      return;
+    }
+    // (and a folder without its slash goes there, so the page's relative URLs work)
+    if (!urlPath.endsWith('/') && fs.existsSync(path.join(file, 'index.html'))) {
+      res.writeHead(301, { ...corsHeaders, Location: `${urlPath}/` }).end();
       return;
     }
     fs.stat(file, (err, st) => {
