@@ -40,6 +40,10 @@ await page.waitForTimeout(2000);
 await shot(page, 'menu');
 
 // New Game: Single Player, New Game, the difficulty
+// (the pointer over Single Player: WebKit tells the game where it is, over the item under the
+// Start button otherwise, which Enter would choose)
+await page.mouse.move(512, 175);
+await page.waitForTimeout(500);
 for (let i = 0; i < 3; i++) {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(1500);

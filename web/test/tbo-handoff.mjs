@@ -40,6 +40,10 @@ await page.click('#start');
 await page.waitForFunction(() => window.Module && Module.webGameInput !== undefined, null, { timeout: 120000 });
 await page.waitForTimeout(3000);
 await shot(page, 'menu');
+// (the pointer over Single Player: WebKit tells the game where it is, over the item under the
+// Start button otherwise, which Enter would choose)
+await page.mouse.move(512, 175);
+await page.waitForTimeout(500);
 for (let i = 0; i < 3; i++) {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(1500);

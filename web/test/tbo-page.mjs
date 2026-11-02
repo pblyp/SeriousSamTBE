@@ -1,6 +1,6 @@
 // The Both Encounters' page (web/build/dist/tbo, see web/shell-tbo), with small made-up
 // installations of both games (no real game data is needed): checks that the page is the
-// version's (names, no demo), takes the two installations as two .zip files picked one
+// version's (names, the two demos offered), takes the two installations as two .zip files picked one
 // after the other or as one .zip with both folders, says what is missing or wrong, puts each
 // installation's files where the engine looks for them (/data, The First Encounter's in
 // /tfe, passed as +cdpath), keeps the group files in pieces in the browser's storage, from
@@ -81,10 +81,11 @@ await tfePage.evaluate(() => localStorage.setItem('touchControls', 'on'));
 const page = await context.newPage();
 page.on('pageerror', (e) => errors.push(e.stack || e.message));
 await page.goto(`${server.url}/tbo/index.html`);
-results['the page is The Both Encounters\' (names, no demo, several .zip files can be picked)'] =
+results['the page is The Both Encounters\' (names, the two demos, several .zip files can be picked)'] =
   await page.title() === 'Serious Sam: The Both Encounters'
   && (await page.textContent('#panel .subtitle')) === 'The Both Encounters'
-  && !await page.isVisible('#play-demo') && !await page.isVisible('#about-demo')
+  && (await page.textContent('#play-demo')) === 'Play the demos'
+  && (await page.textContent('#about-demo summary')) === 'About the demos'
   && await page.evaluate(() => document.getElementById('game-zip').multiple)
   && (await note(page)).includes('The Second Encounter') && (await note(page)).includes('The First Encounter');
 
@@ -119,8 +120,8 @@ const files = await page.evaluate(() => {
     base: exists('/data/SE1_10b.gro') && exists('/data/ModEXT.txt'),
     notNeeded: exists('/data/Bin/SeriousSam.exe') || exists('/data/Help/Readme.txt') || exists('/data/Mods/Warped/Warped3.gro')
       || exists('/tfe/Scripts/Menu/Options.cfg') || exists('/tfe/Controls/00-Default.ctl') || exists('/tfe/Demos/auto-demo0001.dem'),
-    // (TBO's own startup script, not the installation's)
-    ownScripts: new TextDecoder().decode(Module.FS.readFile('/data/Scripts/Game_startup.ini')).includes('01_Hatshepsut'),
+    // (TBO's own startup script, not the installation's, which would start The Second Encounter)
+    ownScripts: !new TextDecoder().decode(Module.FS.readFile('/data/Scripts/Game_startup.ini')).includes('1_0_InTheLastEpisode'),
     tfeNotInData: exists('/data/1_00c.gro'),
   };
 });
