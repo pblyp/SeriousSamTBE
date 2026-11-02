@@ -317,6 +317,9 @@ public:
 
   /* Set all properties to default values. - overridden by ecc */
   virtual void SetDefaultProperties(void);
+  /* Convert what one of The First Encounter's levels saved (before it is initialized again,
+     see CWorld::ConvertFromTFE()). */
+  virtual void ConvertFromTFE(void) {};
 
   /* Get a filename for a component of given type and id. */
   const CTFileName &FileNameForComponent(SLONG slType, SLONG slID);

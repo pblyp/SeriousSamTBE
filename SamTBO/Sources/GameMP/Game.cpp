@@ -125,6 +125,8 @@ INDEX gam_bHealthArmorStays = TRUE;
 INDEX gam_bAllowHealth = TRUE;
 INDEX gam_bAllowArmor = TRUE;
 INDEX gam_bInfiniteAmmo = FALSE;
+// how The First Encounter's levels get light where it is missing (0: not, 1: texture settings, 2: lights)
+INDEX gam_bFixIlluminationsMetod = 2;
 INDEX gam_bDoubleHealth = FALSE;
 INDEX gam_bRespawnInPlace = TRUE;
 INDEX gam_bPlayEntireGame = TRUE;
@@ -183,6 +185,8 @@ BOOL _bUserBreakEnabled = FALSE;
 #endif
 #include "EntitiesMP/Light.h"
 #undef DECL_DLL
+// (light for some of The First Encounter's levels)
+#include "EntitiesMP/Common/LightFixes.h"
 
 void _ClearLights(void)
 {
@@ -216,11 +220,271 @@ void _FixTexturesLandOfDamned(void)
   pl = CPlacement3D(FLOAT3D(7.0f, 63.0f, -268.0f), ANGLE3D(0, 0, 0));
   _CreateLights(pl, 8.0f);
 }
+
+//***************************************************************
+//************  The First Encounter's levels (TFE)  *************
+//***************************************************************
+void _FixTexturesValleyOfTheKings(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 4; i++) {
+    FLOAT m_fCoord1 = _fValleyOfTheKingsCoordinates[i][0];
+    FLOAT m_fCoord2 = _fValleyOfTheKingsCoordinates[i][1];
+    FLOAT m_fCoord3 = _fValleyOfTheKingsCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+}
+
+void _FixTexturesDunes(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 8; i++) {
+    FLOAT m_fCoord1 = _fDunesCoordinates[i][0];
+    FLOAT m_fCoord2 = _fDunesCoordinates[i][1];
+    FLOAT m_fCoord3 = _fDunesCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+}
+
+void _FixTexturesSuburbs(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 21; i++) {
+    FLOAT m_fCoord1 = _fSuburbsCoordinates[i][0];
+    FLOAT m_fCoord2 = _fSuburbsCoordinates[i][1];
+    FLOAT m_fCoord3 = _fSuburbsCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+}
+
+void _FixTexturesMetropolis(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  FLOAT m_fCoord1 = _fMetropolisCoordinates[0][0];
+  FLOAT m_fCoord2 = _fMetropolisCoordinates[0][1];
+  FLOAT m_fCoord3 = _fMetropolisCoordinates[0][2];
+  pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+  _CreateLights(pl, 8.0f);
+}
+
+void _FixTexturesAlleyOfSphinxes(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 37; i++) {
+    FLOAT m_fCoord1 = _fAlleyOfSphinxesCoordinates[i][0];
+    FLOAT m_fCoord2 = _fAlleyOfSphinxesCoordinates[i][1];
+    FLOAT m_fCoord3 = _fAlleyOfSphinxesCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  } 
+}
+
+void _FixTexturesKarnak(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 41; i++) {
+    FLOAT m_fCoord1 = _fKarnakCoordinates[i][0];
+    FLOAT m_fCoord2 = _fKarnakCoordinates[i][1];
+    FLOAT m_fCoord3 = _fKarnakCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+  FLOAT m_fCoord1 = _fKarnakCoordinates[41][0];
+  FLOAT m_fCoord2 = _fKarnakCoordinates[41][1];
+  FLOAT m_fCoord3 = _fKarnakCoordinates[41][2];
+  pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+  _CreateLights(pl, 4.0f);
+}
+
+void _FixTexturesLuxor(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 51; i++) {
+    FLOAT m_fCoord1 = _fLuxorCoordinates[i][0];
+    FLOAT m_fCoord2 = _fLuxorCoordinates[i][1];
+    FLOAT m_fCoord3 = _fLuxorCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+  FLOAT m_fCoord1 = _fLuxorCoordinates[51][0];
+  FLOAT m_fCoord2 = _fLuxorCoordinates[51][1];
+  FLOAT m_fCoord3 = _fLuxorCoordinates[51][2];
+  pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+  _CreateLights(pl, 1.0f);
+}
+
+void _FixTexturesSacredYards(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 27; i++) {
+    FLOAT m_fCoord1 = _fSacredYardsCoordinates[i][0];
+    FLOAT m_fCoord2 = _fSacredYardsCoordinates[i][1];
+    FLOAT m_fCoord3 = _fSacredYardsCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+}
+
+void _FixTexturesKarnakDemo(void) 
+{
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 49; i++) {
+    FLOAT m_fCoord1 = _fKarnakDemoCoordinates[i][0];
+    FLOAT m_fCoord2 = _fKarnakDemoCoordinates[i][1];
+    FLOAT m_fCoord3 = _fKarnakDemoCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+  FLOAT m_fCoord1 = _fKarnakDemoCoordinates[49][0];
+  FLOAT m_fCoord2 = _fKarnakDemoCoordinates[49][1];
+  FLOAT m_fCoord3 = _fKarnakDemoCoordinates[49][2];
+  pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+  _CreateLights(pl, 4.0f);
+}
+
+void _FixTexturesIntro(void) 
+{ 
+  _ClearLights();
+  CPlacement3D pl;
+  for(int i = 0; i < 8; i++) {
+    FLOAT m_fCoord1 = _fIntroCoordinates[i][0];
+    FLOAT m_fCoord2 = _fIntroCoordinates[i][1];
+    FLOAT m_fCoord3 = _fIntroCoordinates[i][2];
+    pl = CPlacement3D(FLOAT3D(m_fCoord1, m_fCoord2, m_fCoord3), ANGLE3D(0, 0, 0));
+    _CreateLights(pl, 8.0f);
+  }
+}
+//***************************************************************
+//*********************** Old metods: ***************************
+//****************  Fix Textures on Obelisk  ********************
+//***************************************************************
+void _FixTexturesOnObelisk(CTFileName strLevelName)
+{
+  // for each entity in the world
+  {FOREACHINDYNAMICCONTAINER(_pNetwork->ga_World.wo_cenEntities, CEntity, iten) {
+    // if it is brush entity
+    if (iten->en_RenderType == CEntity::RT_BRUSH) {
+      // for each mip in its brush
+      FOREACHINLIST(CBrushMip, bm_lnInBrush, iten->en_pbrBrush->br_lhBrushMips, itbm) {
+        // for all sectors in this mip
+        FOREACHINDYNAMICARRAY(itbm->bm_abscSectors, CBrushSector, itbsc) {
+          // for all polygons in sector
+          FOREACHINSTATICARRAY(itbsc->bsc_abpoPolygons, CBrushPolygon, itbpo)
+          {
+            CTFileName strTextureName = itbpo->bpo_abptTextures[1].bpt_toTexture.GetName().FileName();
+            int _Obelisk02Light_found   = strncmp((const char *)strTextureName, (const char *) "Obelisk02Light", (size_t) 14 );
+            if (_Obelisk02Light_found == 0 ){
+                // Settings:
+                // itbpo->bpo_abptTextures[1].bpt_toTexture.GetName().FileName()
+                // itbpo->bpo_abptTextures[1].s.bpt_ubBlend
+                // itbpo->bpo_abptTextures[1].s.bpt_ubFlags 
+                // itbpo->bpo_abptTextures[1].s.bpt_colColor
+              if ( strLevelName=="KarnakDemo" || strLevelName=="Intro" || strLevelName=="08_Suburbs"
+                || strLevelName=="13_Luxor" || strLevelName=="14_SacredYards") {
+                itbpo->bpo_abptTextures[1].s.bpt_colColor = (C_WHITE| 0x5F);
+              } else if ( strLevelName=="04_ValleyOfTheKings" || strLevelName=="11_AlleyOfSphinxes" || strLevelName=="12_Karnak"){
+                itbpo->bpo_abptTextures[1].s.bpt_colColor = (C_GRAY| 0x2F);
+              }
+            }
+          }
+        }
+      }
+    } // END if()
+  }}
+}
+//***************************************************************
+//**********^**  Fix Textures on Alley Of Sphinxes  *************
+//***************************************************************
+void _FixTexturesOnAlleyOfSphinxes(void)
+{
+  // for each entity in the world
+  {FOREACHINDYNAMICCONTAINER(_pNetwork->ga_World.wo_cenEntities, CEntity, iten) {
+    // if it is brush entity
+    if (iten->en_RenderType == CEntity::RT_BRUSH) {
+      // for each mip in its brush
+      FOREACHINLIST(CBrushMip, bm_lnInBrush, iten->en_pbrBrush->br_lhBrushMips, itbm) {
+        // for all sectors in this mip
+        FOREACHINDYNAMICARRAY(itbm->bm_abscSectors, CBrushSector, itbsc) {
+          // for all polygons in sector
+          FOREACHINSTATICARRAY(itbsc->bsc_abpoPolygons, CBrushPolygon, itbpo)
+          {
+            CTFileName strTextureName = itbpo->bpo_abptTextures[1].bpt_toTexture.GetName().FileName();
+            int _EyeOfRa_found = strncmp((const char *)strTextureName, (const char *) "EyeOfRa", (size_t) 7 );
+            int _Wall12_found  = strncmp((const char *)strTextureName, (const char *) "Wall12",  (size_t) 6 );
+            int _Wingy02_found = strncmp((const char *)strTextureName, (const char *) "Wingy02", (size_t) 7 );
+            if (_EyeOfRa_found == 0 || _Wall12_found == 0 || _Wingy02_found == 0){
+              itbpo->bpo_abptTextures[1].s.bpt_ubBlend  = BPT_BLEND_BLEND;
+              itbpo->bpo_abptTextures[1].s.bpt_colColor = C_GRAY|0x80;
+            }
+          }
+        }
+      }
+    } // END if()
+  }}
+}
+//***************************************************************
+//***************************************************************
+//***************************************************************
+
 //***************************************************************
 //***************************************************************
 //***************************************************************
 
 // make sure that console doesn't show last lines if not playing in network
+// fix textures in The First Encounter's levels
+static void _FixTexturesTFE(const CTString &strLevelName)
+{
+  INDEX iBugFixMetod = _pShell->GetINDEX("gam_bFixIlluminationsMetod");
+
+  if(iBugFixMetod == 1) {
+    // Fix Obelisk textures
+    if ( strLevelName=="04_ValleyOfTheKings" || strLevelName=="11_AlleyOfSphinxes" || strLevelName=="12_Karnak" 
+      || strLevelName=="13_Luxor" || strLevelName=="KarnakDemo" || strLevelName=="Intro" 
+      || strLevelName=="08_Suburbs" || strLevelName=="14_SacredYards") {
+      _FixTexturesOnObelisk(strLevelName);
+    }
+    // Fix Alley Of Sphinxes textures
+    if (strLevelName=="11_AlleyOfSphinxes") {
+      _FixTexturesOnAlleyOfSphinxes();
+    }
+  } else if (iBugFixMetod == 2) {
+    // Fix textures
+    if (strLevelName=="04_ValleyOfTheKings") {
+      _FixTexturesValleyOfTheKings();
+    } else if (strLevelName=="07_Dunes") {
+      _FixTexturesDunes();
+    } else if (strLevelName=="08_Suburbs") {
+      _FixTexturesSuburbs();
+    } else if (strLevelName=="10_Metropolis") {
+      _FixTexturesMetropolis();
+    } else if (strLevelName=="11_AlleyOfSphinxes") {
+      _FixTexturesAlleyOfSphinxes();
+    } else if (strLevelName=="12_Karnak") {
+      _FixTexturesKarnak();
+    } else if (strLevelName=="13_Luxor") {
+      _FixTexturesLuxor();
+    } else if (strLevelName=="14_SacredYards") {
+      _FixTexturesSacredYards();
+    } else if (strLevelName=="KarnakDemo") {
+      _FixTexturesKarnakDemo();
+    } else if (strLevelName=="Intro") {
+      _FixTexturesIntro();
+    }
+  }
+}
+
 void MaybeDiscardLastLines(void)
 {
   // Get Level Name and Mod Name
@@ -228,7 +492,10 @@ void MaybeDiscardLastLines(void)
   CTString strModName = _pShell->GetValue("sys_strModName");
 
   // Fix textures
-  if ( /* strModName==" && */ strLevelName=="3_2_LandOfDamned") {
+  if (_pNetwork->ga_World.wo_bTFE) {
+    // (in The First Encounter's levels, as in it)
+    _FixTexturesTFE(strLevelName);
+  } else if ( /* strModName==" && */ strLevelName=="3_2_LandOfDamned") {
     _FixTexturesLandOfDamned();
   }
 
@@ -1130,6 +1397,7 @@ void CGame::InitInternal( void)
   _pShell->DeclareSymbol("persistent user INDEX gam_bAllowHealth     ;", (void *)&gam_bAllowHealth     );
   _pShell->DeclareSymbol("persistent user INDEX gam_bAllowArmor      ;", (void *)&gam_bAllowArmor      );
   _pShell->DeclareSymbol("persistent user INDEX gam_bInfiniteAmmo    ;", (void *)&gam_bInfiniteAmmo    );
+  _pShell->DeclareSymbol("persistent user INDEX gam_bFixIlluminationsMetod;", (void *)&gam_bFixIlluminationsMetod);
   _pShell->DeclareSymbol("persistent user INDEX gam_bDoubleHealth    ;", (void *)&gam_bDoubleHealth    );
   _pShell->DeclareSymbol("persistent user INDEX gam_bRespawnInPlace  ;", (void *)&gam_bRespawnInPlace  );
 

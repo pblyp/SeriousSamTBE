@@ -1196,6 +1196,8 @@ properties:
  191 INDEX m_iLastSeriousBombCount = 0,  // ammount of serious bombs player had before firing
  192 FLOAT m_tmSeriousBombFired = -10.0f,  // when the bomb was last fired
 
+ 193 BOOL m_bInTFEWorld = FALSE,     // set if the keys are from The First Encounter's levels
+
 {
   ShellLaunchData ShellLaunchData_array;  // array of data describing flying empty shells
   INDEX m_iFirstEmptySLD;                         // index of last added empty shell
@@ -2255,6 +2257,17 @@ functions:
   }
 
   // update per-level stats
+  // The First Encounter's keys have the same numbers as this game's: forget the keys when going
+  // from one game's levels to the other's
+  void ForgetKeysOfOtherGame(void)
+  {
+    const BOOL bTFE = GetWorld()->wo_bTFE;
+    if (bTFE!=m_bInTFEWorld) {
+      m_ulKeys = 0;
+      m_bInTFEWorld = bTFE;
+    }
+  }
+
   void UpdateLevelStats(void)
   {
     // clear stats for this level
@@ -3436,8 +3449,8 @@ functions:
       // make key mask
       ULONG ulKey = 1<<INDEX(((EKey&)ee).kitType);
       EKey &eKey = (EKey&)ee;
-      if(eKey.kitType == KIT_HAWKWINGS01DUMMY || eKey.kitType == KIT_HAWKWINGS02DUMMY
-        || eKey.kitType == KIT_TABLESDUMMY || eKey.kitType ==KIT_JAGUARGOLDDUMMY)
+      // (other keys in The First Encounter's levels)
+      if (IsDummyKey(eKey.kitType))
       {
         ulKey = 0;
       }
@@ -5212,7 +5225,13 @@ functions:
     INDEX iLevel = -1;
     CTString strLevelName = GetWorld()->wo_fnmFileName.FileName();
     
-    //strLevelName.ScanF("%02d_", &iLevel);
+    // The First Encounter's levels (numbered %02d_) are in the upper 16 bits (for its map)
+    if (GetWorld()->wo_bTFE) {
+      strLevelName.ScanF("%02d_", &iLevel);
+      if (iLevel>0 && iLevel<=15) {
+        ((CSessionProperties*)GetSP())->sp_ulLevelsMask|=1<<(16+iLevel-1);
+      }
+    } else {
     INDEX u, v;
     u = v = -1;
     strLevelName.ScanF("%01d_%01d_", &u, &v);
@@ -5222,6 +5241,7 @@ functions:
             
     if (iLevel>0) {
       ((CSessionProperties*)GetSP())->sp_ulLevelsMask|=1<<(iLevel-1);
+    }
     }
 
     // find player index
@@ -5617,6 +5637,7 @@ procedures:
  *                     WORLD CHANGE                         *
  ************************************************************/
   WorldChange() {
+    ForgetKeysOfOtherGame();
     // if in single player
     if (GetSP()->sp_bSinglePlayer) {
       // mark world as visited
@@ -5649,6 +5670,7 @@ procedures:
 
   WorldChangeDead() 
   {
+    ForgetKeysOfOtherGame();
     // forbid respawning in-place when changing levels while dead
     m_ulFlags &= ~PLF_RESPAWNINPLACE;
 
@@ -6654,6 +6676,7 @@ procedures:
     time(&t);
     m_iStartTime = (INDEX) t;
     m_ctUnreadMessages = 0;
+    m_bInTFEWorld = GetWorld()->wo_bTFE;
     SetFlags(GetFlags()|ENF_CROSSESLEVELS|ENF_NOTIFYLEVELCHANGE);
     InitAsEditorModel();
 

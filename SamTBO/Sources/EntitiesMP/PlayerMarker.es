@@ -17,12 +17,27 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 %{
 #include "EntitiesMP/StdH/StdH.h"
 #include "EntitiesMP/MusicHolder.h"
+#include "EntitiesMP/PlayerWeapons.h"
 %}
 
 uses "EntitiesMP/Marker";
 
 %{
   extern void CPlayerWeapons_Precache(ULONG ulAvailable);
+
+// The First Encounter's weapon masks (bit = weapon-1) as this game's: the same up to the
+// grenade launcher, then its laser (14) and cannon (16) have other numbers
+static INDEX WeaponsFromTFE(INDEX iTFE)
+{
+  INDEX i = iTFE & ((1<<WEAPON_GRENADELAUNCHER)-1);
+  if (iTFE & (1<<(14-1))) {
+    i |= 1<<(WEAPON_LASER-1);
+  }
+  if (iTFE & (1<<(16-1))) {
+    i |= 1<<(WEAPON_IRONCANNON-1);
+  }
+  return i;
+}
 %}
 
 class CPlayerMarker: CMarker {
@@ -49,6 +64,12 @@ components:
   2 texture TEXTURE_MARKER   "Models\\Editor\\PlayerStart.tex",
 
 functions:
+  // the weapons given and taken in one of The First Encounter's levels
+  void ConvertFromTFE(void) {
+    m_iGiveWeapons = WeaponsFromTFE(m_iGiveWeapons);
+    m_iTakeWeapons = WeaponsFromTFE(m_iTakeWeapons);
+  }
+
   void Precache(void) {
     if (m_iGiveWeapons>1) {
       CPlayerWeapons_Precache(m_iGiveWeapons);

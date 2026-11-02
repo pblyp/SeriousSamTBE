@@ -1027,6 +1027,7 @@ add_library(${GAMEMPLIB} ${SE_LIB_TYPE}
     GameMP/LCDDrawing.cpp
     GameMP/LoadingHook.cpp
     GameMP/Map.cpp
+    GameMP/MapTFE.cpp
     GameMP/SessionProperties.cpp
     GameMP/WEDInterface.cpp
 )

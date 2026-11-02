@@ -309,6 +309,7 @@ DECL_DLL void PrintCenterMessage(CEntity *penThis, CEntity *penTarget,
 
 // get name of a key item
 DECL_DLL const char *GetKeyName(int /*enum KeyItemType*/ kit);
+DECL_DLL BOOL IsDummyKey(int /*enum KeyItemType*/ kit);
 
 // get session properties
 DECL_DLL inline const CSessionProperties *GetSP(void)

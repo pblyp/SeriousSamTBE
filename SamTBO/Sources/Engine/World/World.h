@@ -97,6 +97,7 @@ public:
   CListHead wo_lhTimers;      // timer scheduled entities
   CListHead wo_lhMovers;        // entities that want to/have to move
   BOOL wo_bPortalLinksUpToDate; // set if portal-sector links are up to date
+  BOOL wo_bTFE;   // set if this is one of The First Encounter's levels (from its folder)
 
   /* Initialize collision grid. */
   void InitCollisionGrid(void);
@@ -255,6 +256,8 @@ public:
   void Load_t(const CTFileName &fnmWorld); // throw char *
   /* Reinitialize entities from their properties. (use only in WEd!) */
   void ReinitializeEntities(void);
+  /* Convert one of The First Encounter's levels for this game's entities, once loaded. */
+  void ConvertFromTFE(void);
   /* Precache data needed by entities. */
   void PrecacheEntities_t(void);  // throw char *
   // delete all entities that don't fit given spawn flags

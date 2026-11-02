@@ -92,6 +92,7 @@ CWorld::CWorld(void)
   , wo_colBackground(C_lGRAY)       // clear background color
   , wo_ulSpawnFlags(0)
   , wo_bPortalLinksUpToDate(FALSE)  // portal-sector links must be updated
+  , wo_bTFE(FALSE)
 {
   wo_baBrushes.ba_pwoWorld = this;
   wo_taTerrains.ta_pwoWorld = this;
@@ -755,6 +756,23 @@ void CWorld::SelectByTextureInWorld(
 /*
  * Reinitialize entities from their properties. (use only in WEd!)
  */
+/*
+ * Convert one of The First Encounter's levels for this game's entities, once loaded: the
+ * entities convert what they read (see CEntity::ConvertFromTFE()), then they are initialized
+ * again, as their saved states are numbered differently in The First Encounter's entities.
+ */
+void CWorld::ConvertFromTFE(void)
+{
+  {
+    // must be in 24bit mode when managing entities
+    CSetFPUPrecision FPUPrecision(FPT_24BIT);
+    FOREACHINDYNAMICCONTAINER(wo_cenEntities, CEntity, iten) {
+      iten->ConvertFromTFE();
+    }
+  }
+  ReinitializeEntities();
+}
+
 void CWorld::ReinitializeEntities(void)
 {
   _pfWorldEditingProfile.StartTimer(CWorldEditingProfile::PTI_REINITIALIZEENTITIES);

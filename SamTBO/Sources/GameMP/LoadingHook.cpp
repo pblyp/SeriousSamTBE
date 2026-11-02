@@ -107,6 +107,17 @@ static void LoadingHook_t(CProgressHookInfo *pphi)
     CTString strLevelName = _pNetwork->ga_fnmWorld.FileName();
     CTString strNextLevelName = _pNetwork->ga_fnmNextLevel.FileName();
     
+    // (The First Encounter's levels are numbered differently, and in the upper bits)
+    if (_pNetwork->ga_World.wo_bTFE) {
+      strLevelName.ScanF("%02d_", &iLevel);
+      strNextLevelName.ScanF("%02d_", &iLevelNext);
+      if (iLevel>0 && iLevel<=15) {
+        ulLevelMask|=1<<(16+iLevel-1);
+      }
+      if (iLevelNext>0 && iLevelNext<=15) {
+        ulLevelMask|=1<<(16+iLevelNext-1);
+      }
+    } else {
     // second encounter
     INDEX u, v;
     u = v = -1;
@@ -127,9 +138,11 @@ static void LoadingHook_t(CProgressHookInfo *pphi)
     if (iLevelNext>0) {
       ulLevelMask|=1<<(iLevelNext-1);
     }
+    }
   }
 
-  if (ulLevelMask!=0 && !_pNetwork->IsPlayingDemo()) {
+  extern ULONG MapLevelsMask(ULONG ulLevelMask);
+  if (MapLevelsMask(ulLevelMask)!=0 && !_pNetwork->IsPlayingDemo()) {
     // map hook
     extern void RenderMap( CDrawPort *pdp, ULONG ulLevelMask, CProgressHookInfo *pphi);
     RenderMap(&dpHook, ulLevelMask, pphi);

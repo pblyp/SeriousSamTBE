@@ -76,6 +76,12 @@ components:
 213 sound SOUND_PICK             "Sounds\\Items\\Ammo.wav",
 
 functions:
+  // The First Encounter's ammo packs don't have this game's napalm and sniper bullets
+  void ConvertFromTFE(void) {
+    m_iNapalm = 0;
+    m_iSniperBullets = 0;
+  }
+
   void Precache(void) {
     PrecacheSound(SOUND_PICK);
   }

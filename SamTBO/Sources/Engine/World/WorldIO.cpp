@@ -70,6 +70,8 @@ void CWorld::Load_t(const CTFileName &fnmWorld) // throw char *
 {
   // remember the file
   wo_fnmFileName = fnmWorld;
+  // The First Encounter's levels come from its folder
+  wo_bTFE = IsFileFromCDPath(fnmWorld);
   // open the file
   CTFileStream strmFile;
   strmFile.Open_t(fnmWorld);
@@ -95,6 +97,14 @@ void CWorld::Load_t(const CTFileName &fnmWorld) // throw char *
     SetProgressDescription(TRANS("saving converted file"));
     CallProgressHook_t(0.0f);
     Save_t(fnmWorld);
+    CallProgressHook_t(1.0f);
+
+  // if it is one of The First Encounter's levels
+  } else if (wo_bTFE) {
+    // convert it (each time, it isn't saved)
+    SetProgressDescription(TRANS("converting from The First Encounter"));
+    CallProgressHook_t(0.0f);
+    ConvertFromTFE();
     CallProgressHook_t(1.0f);
   }
 }
@@ -164,6 +174,9 @@ void CWorld::LoadBrushes_t(const CTFileName &fnmWorld) // throw char *
 {
   // remember the file
   wo_fnmFileName = fnmWorld;
+  // The First Encounter's levels come from its folder (their state is read from elsewhere,
+  // converted already)
+  wo_bTFE = IsFileFromCDPath(fnmWorld);
   // open the file
   CTFileStream strmFile;
   strmFile.Open_t(fnmWorld);

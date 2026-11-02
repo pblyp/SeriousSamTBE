@@ -254,8 +254,25 @@ void ReleaseMapData(void)
   _toMapBcgRU.SetData(NULL);
 }
 
+// the visited levels of the game whose map is shown: The First Encounter's levels are in the
+// upper 16 bits (see CPlayer::TeleportPlayer()), and its map is shown in its levels
+ULONG MapLevelsMask(ULONG ulLevelMask)
+{
+  if (_pNetwork->ga_World.wo_bTFE) {
+    return (ulLevelMask>>16)&0x7FFF;
+  }
+  return ulLevelMask&0xFFFF;
+}
+
 void RenderMap( CDrawPort *pdp, ULONG ulLevelMask, CProgressHookInfo *pphi)
 {
+  if (_pNetwork->ga_World.wo_bTFE) {
+    extern void RenderMapTFE( CDrawPort *pdp, ULONG ulLevelMask, CProgressHookInfo *pphi);
+    RenderMapTFE(pdp, MapLevelsMask(ulLevelMask), pphi);
+    return;
+  }
+  ulLevelMask = MapLevelsMask(ulLevelMask);
+
   if( !ObtainMapData())
   {
     ReleaseMapData();
