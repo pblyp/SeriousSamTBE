@@ -208,7 +208,21 @@
         return null;
       }
       const db = await this.open();
-      return (await transaction(db, 'meta', 'readonly', (store) => store.get('meta'))) || null;
+      const meta = (await transaction(db, 'meta', 'readonly', (store) => store.get('meta'))) || null;
+      return meta && meta.files ? meta : null;
+    },
+    // a set the game never started with (it never counted as kept) takes room for nothing:
+    // delete it (unless it is being kept right now, in another tab)
+    async removeUnfinished() {
+      if (!indexedDB.databases || !(await indexedDB.databases()).some(({ name }) => name === OWN_FILES_DB)) {
+        return false;
+      }
+      const meta = (await transaction(await this.open(), 'meta', 'readonly', (store) => store.get('meta'))) || null;
+      if (meta && (meta.files || Date.now() - meta.startedAt < 60 * 60 * 1000)) {
+        return false;
+      }
+      await this.remove();
+      return true;
     },
     async read(path) {
       const record = await transaction(await this.open(), 'files', 'readonly', (store) => store.get(path));
@@ -222,7 +236,8 @@
       if (navigator.storage && navigator.storage.persist) {
         navigator.storage.persist().catch(() => {});
       }
-      await this.open();
+      // (when it was started: an unfinished set is deleted later, see removeUnfinished())
+      await transaction(await this.open(), 'meta', 'readwrite', (store) => store.put({ startedAt: Date.now() }, 'meta'));
     },
     async put(path, buffer) {
       await transaction(this.db, 'files', 'readwrite', (store) => store.put({ path, data: buffer }));
@@ -438,7 +453,10 @@
       if (!found) continue;
       const [install, dir] = found;
       const path = entry.path.slice(dir.length);
-      if (isNeeded(path)) files.push({ ...entry, path, root: install.root, storePrefix: install.storePrefix });
+      // (and not what the version doesn't read from that installation, see config.js)
+      if (isNeeded(path) && !(install.skip && install.skip.test(path))) {
+        files.push({ ...entry, path, root: install.root, storePrefix: install.storePrefix });
+      }
     }
     return files;
   }
@@ -955,6 +973,9 @@
   async function showStoredFiles() {
     let meta = null;
     try {
+      if (await OwnFiles.removeUnfinished()) {
+        log('Game files that the game never started with were deleted from this browser');
+      }
       meta = await OwnFiles.stored();
     } catch (e) {
       // (no IndexedDB, e.g. in some private windows)

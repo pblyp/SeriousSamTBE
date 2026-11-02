@@ -42,9 +42,13 @@ function install(folder, files) {
 const tseDir = install('Serious Sam Classic The Second Encounter', {
   'SE1_00.gro': 'the second encounter', 'SE1_00_Levels.gro': 'its levels',
   'Bin/SeriousSam.exe': 'not needed', 'Help/Readme.txt': 'not needed either',
+  // (TBO's own scripts are used, and mods aren't offered)
+  'Scripts/Game_startup.ini': 'sam_strFirstLevel = "Levels\\\\LevelsMP\\\\1_0_InTheLastEpisode.wld";', 'Mods/Warped/Warped3.gro': 'a mod',
 });
 const tfeDir = install('Serious Sam Classic The First Encounter', {
   '1_00c.gro': 'the first encounter', '1_00_music.gro': 'its music', 'Levels/01_Hatshepsut.wld': 'a loose level',
+  // (only its game data is read)
+  'Scripts/Menu/Options.cfg': 'not read', 'Controls/00-Default.ctl': 'not read', 'Demos/auto-demo0001.dem': 'not read',
 });
 const zip = (name, cwd, ...what) => {
   const out = path.join(tmp, name);
@@ -113,12 +117,15 @@ const files = await page.evaluate(() => {
     tfe: exists('/tfe/1_00c.gro') && exists('/tfe/1_00_music.gro') && exists('/tfe/Levels/01_Hatshepsut.wld'),
     // (and the repository's files, from the base package)
     base: exists('/data/SE1_10b.gro') && exists('/data/ModEXT.txt'),
-    notNeeded: exists('/data/Bin/SeriousSam.exe') || exists('/data/Help/Readme.txt'),
+    notNeeded: exists('/data/Bin/SeriousSam.exe') || exists('/data/Help/Readme.txt') || exists('/data/Mods/Warped/Warped3.gro')
+      || exists('/tfe/Scripts/Menu/Options.cfg') || exists('/tfe/Controls/00-Default.ctl') || exists('/tfe/Demos/auto-demo0001.dem'),
+    // (TBO's own startup script, not the installation's)
+    ownScripts: new TextDecoder().decode(Module.FS.readFile('/data/Scripts/Game_startup.ini')).includes('01_Hatshepsut'),
     tfeNotInData: exists('/data/1_00c.gro'),
   };
 });
 results[`each installation's files are where the engine looks for them (${JSON.stringify(files)})`] =
-  files.tse && files.tfe && files.base && !files.notNeeded && !files.tfeNotInData && files.inStorage;
+  files.tse && files.tfe && files.base && !files.notNeeded && !files.tfeNotInData && files.inStorage && files.ownScripts;
 
 // kept in the version's own store, The First Encounter's under tfe/: the group files in
 // pieces, the others whole
@@ -183,6 +190,31 @@ results['the next visit plays the kept files, the group files from their pieces'
   againLog.some((l) => /\/data\/SE1_00\.gro: \d+ files/.test(l)) && againLog.some((l) => /\/tfe\/1_00c\.gro: \d+ files/.test(l))
   && await again.evaluate(() => Module.FS.stat('/data/SE1_00.gro').size === 0 && Module.FS.stat('/tfe/Levels/01_Hatshepsut.wld').size === 13);
 await again.close();
+
+// files kept by a visit where the game never started with them are deleted the next time
+const unfinished = await context.newPage();
+await unfinished.goto(`${server.url}/tbo/index.html`);
+const removedUnfinished = await unfinished.evaluate(async () => {
+  // (a set started over an hour ago, never finished: no list of files)
+  const db = await new Promise((resolve) => {
+    const r = indexedDB.open('tbo-own-files', 2);
+    r.onupgradeneeded = () => ['files', 'meta', 'chunks'].forEach((n) => { if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n, n === 'files' ? { keyPath: 'path' } : undefined); });
+    r.onsuccess = () => resolve(r.result);
+  });
+  await new Promise((resolve) => {
+    const tx = db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').put({ startedAt: Date.now() - 2 * 60 * 60 * 1000 }, 'meta');
+    tx.oncomplete = resolve;
+  });
+  db.close();
+  return true;
+});
+await unfinished.reload();
+await unfinished.waitForFunction(() => window.engineLog.some((l) => /never started with were deleted/.test(l)), null, { timeout: 10000 })
+  .catch(() => {});
+results['files the game never started with are deleted on the next visit'] = removedUnfinished
+  && !(await databases(unfinished)).includes('tbo-own-files') && !await unfinished.isVisible('#play-own');
+await unfinished.close();
 
 // one .zip with both folders
 const page2 = await context.newPage();
