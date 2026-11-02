@@ -82,6 +82,10 @@
   function log(text) {
     engineLog.push(text);
     console.log(text);
+    // (a network game that refused this player's game files)
+    if (/Wrong CRC check/.test(text)) {
+      explainFilesRefused();
+    }
     if (showLog) {
       logEl.textContent += text + '\n';
       if (logEl.textContent.length > 200000) {
@@ -755,6 +759,13 @@
     netShare.hidden = net.state !== 'hosting' || !navigator.share;
     netBadge.hidden = !text || (netBadgeHidden && net.state === 'hosting');
     netBadge.classList.toggle('error', net.state === 'failed');
+  }
+  // the host's game checks that the players have the same files: say what to do when not
+  function explainFilesRefused() {
+    const versions = multipleInstalls ? 'versions of both games' : 'version of the game';
+    updateNetBadge({ state: 'failed', error: 'The host\'s game refused your game files ("Wrong CRC check."): '
+      + `everyone in a network game needs the same ${versions} (e.g. all from GOG or all from Steam, `
+      + 'with the same patches).' });
   }
   document.getElementById('net-hide').addEventListener('click', () => {
     netBadgeHidden = true;
