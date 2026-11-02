@@ -727,15 +727,17 @@ void UNZIPGetFileInfo(INDEX iHandle, CTFileName &fnmZip,
 
 // open a zip file entry for reading
 // get index of a file in an archive from the CD path (-1 for no file), even if other
-// archives have it too
+// archives have it too: the original game's copy, in the archive that comes last (later ones,
+// such as the open source release's SE1_10.gro, have placeholder texts, e.g. Data\Credits.txt)
 INDEX UNZIPGetFileIndexCD(const CTFileName &fnm)
 {
+  INDEX iFound = -1;
   for(INDEX iFile=0; iFile<_azeFiles.Count(); iFile++) {
     if (_azeFiles[iFile].ze_bCD && _azeFiles[iFile].ze_fnm == fnm) {
-      return iFile;
+      iFound = iFile;
     }
   }
-  return -1;
+  return iFound;
 }
 
 static INDEX UNZIPOpenEntry_t(const CTFileName &fnm, CZipEntry *pze);

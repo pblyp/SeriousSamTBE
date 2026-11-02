@@ -30,7 +30,7 @@ INDEX UNZIPOpen_t(const CTFileName &fnm);
 // open a zip file entry by its index
 INDEX UNZIPOpenAtIndex_t(INDEX iFile);
 // get index of a file in an archive from the CD path (-1 for no file), even if other
-// archives have it too
+// archives have it too (the original game's copy)
 INDEX UNZIPGetFileIndexCD(const CTFileName &fnm);
 // get uncompressed size of a file
 SLONG UNZIPGetSize(INDEX iHandle);

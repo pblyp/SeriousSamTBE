@@ -348,6 +348,8 @@ static struct PlayerControls pctlCurrent;
 
 // cheats
 static INDEX cht_iGoToMarker = -1;
+// for testing The First Encounter's end (see CPlayer::FirstEncounterEndMarker())
+static INDEX dbg_bFirstEncounterEnd = FALSE;
 static INDEX cht_bKillAll    = FALSE;
 static INDEX cht_bGiveAll    = FALSE;
 static INDEX cht_bOpen       = FALSE;
@@ -832,6 +834,7 @@ void CPlayer_OnInitClass(void)
 
   // this cheat is always enabled
   _pShell->DeclareSymbol("user INDEX cht_iGoToMarker;", (void *) &cht_iGoToMarker);
+  _pShell->DeclareSymbol("user INDEX dbg_bFirstEncounterEnd;", (void *) &dbg_bFirstEncounterEnd);
 
   // player speed and view parameters, not declared except in internal build
   #if 0
@@ -2259,6 +2262,39 @@ functions:
   }
 
   // update per-level stats
+  // the action marker where this level's ending starts the credits on the way to the end of the
+  // game (or that end itself), or NULL (for testing The First Encounter's end, dbg_bFirstEncounterEnd)
+  CEntity *FirstEncounterEndMarker(void)
+  {
+    CEntity *penEnd = NULL;
+    {FOREACHINDYNAMICCONTAINER(GetWorld()->wo_cenEntities, CEntity, iten) {
+      CEntity *pen = iten;
+      if (IsOfClass(pen, "PlayerActionMarker") && ((CPlayerActionMarker *)pen)->m_paaAction==PAA_ENDOFGAME) {
+        penEnd = pen;
+      }
+    }}
+    if (penEnd==NULL) {
+      CPrintF("dbg_bFirstEncounterEnd: no end of the game in this level\n");
+      return NULL;
+    }
+    CEntity *penCredits = NULL;
+    {FOREACHINDYNAMICCONTAINER(GetWorld()->wo_cenEntities, CEntity, iten) {
+      CEntity *penFirst = iten;
+      if (IsOfClass(penFirst, "PlayerActionMarker") && ((CPlayerActionMarker *)penFirst)->m_paaAction==PAA_STARTCREDITS) {
+        // (if its markers lead to the end of the game)
+        CEntity *pen = penFirst;
+        for (INDEX i=0; i<100 && pen!=NULL && IsOfClass(pen, "PlayerActionMarker"); i++) {
+          if (pen==penEnd) {
+            penCredits = penFirst;
+          }
+          pen = ((CPlayerActionMarker *)pen)->m_penTarget;
+        }
+      }
+    }}
+    CPrintF("dbg_bFirstEncounterEnd: the ending from %s\n", penCredits!=NULL ? "its credits" : "the end of the game");
+    return penCredits!=NULL ? penCredits : penEnd;
+  }
+
   // The First Encounter's keys have the same numbers as this game's: forget the keys when going
   // from one game's levels to the other's
   void ForgetKeysOfOtherGame(void)
@@ -3853,6 +3889,18 @@ functions:
     // wanna cheat a bit?
     if (CheatsEnabled()) {
       Cheats();
+    }
+
+    // (for testing The First Encounter's end in single player: its last level's ending, from where
+    // its credits start)
+    if (dbg_bFirstEncounterEnd && GetSP()->sp_bSinglePlayer && (GetFlags()&ENF_ALIVE) && m_penActionMarker==NULL) {
+      dbg_bFirstEncounterEnd = FALSE;
+      CEntity *penStart = FirstEncounterEndMarker();
+      if (penStart!=NULL) {
+        EAutoAction eAutoAction;
+        eAutoAction.penFirstMarker = penStart;
+        SendEvent(eAutoAction);
+      }
     }
 
     // if teleporting to marker (this cheat is enabled in all versions)
@@ -5999,6 +6047,11 @@ procedures:
     // stop firing
     ((CPlayerWeapons&)*m_penWeapons).SendEvent(EReleaseWeapon());
 
+    // (its last level doesn't roll the credits: The First Encounter showed them in the menu)
+    if (m_tmTFECreditsEnd<_pTimer->CurrentTick()) {
+      _pShell->Execute("sam_iStartCredits=2;");
+      m_tmTFECreditsEnd = _pTimer->CurrentTick()+TFECreditsLength();
+    }
     m_bSkipTFECredits = FALSE;
     while (_pTimer->CurrentTick()<m_tmTFECreditsEnd && !m_bSkipTFECredits) {
       autowait(_pTimer->TickQuantum);
@@ -6010,6 +6063,7 @@ procedures:
     _SwcWorldChange.strGroup = "";
     _SwcWorldChange.plLink = GetPlacement();
     _SwcWorldChange.iType = (INDEX)WLT_FIXED;
+    CPrintF("The First Encounter's end: The Second Encounter follows\n");
     _pNetwork->ChangeLevel(CTFILENAME("Levels\\LevelsMP\\1_0_InTheLastEpisode.wld"), FALSE, 0);
     return EReturn();
   };
