@@ -586,6 +586,10 @@ void CDLLEntityClass::PrecacheClass(SLONG slID, INDEX iUser /* = -1 */)
   CEntityComponent *pecClass = ComponentForTypeAndID(ECT_CLASS, slID);
   ASSERT(pecClass!=NULL);
   pecClass->ObtainWithCheck();
+  // (it couldn't be loaded, while checking components, see BeginComponentCheck())
+  if (pecClass->ec_pecEntityClass==NULL) {
+    return;
+  }
   pecClass->ec_pecEntityClass->ec_pdecDLLClass->dec_OnPrecache(
     pecClass->ec_pecEntityClass->ec_pdecDLLClass, iUser);
 }

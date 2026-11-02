@@ -2261,10 +2261,27 @@ functions:
     }
   }
 
+  // those of the weapons whose files are there (a demo has only some weapons'): each one's are
+  // loaded as for precaching, and one that can't be is left out
+  ULONG WeaponsWithFiles(ULONG ulWeapons) {
+    ULONG ulThere = 0;
+    for (INDEX iBit=0; iBit<32; iBit++) {
+      const ULONG ulWeapon = ((ULONG)1)<<iBit;
+      if (ulWeapons&ulWeapon) {
+        BeginComponentCheck();
+        CPlayerWeapons_Precache(ulWeapon);
+        if (EndComponentCheck()==0) {
+          ulThere |= ulWeapon;
+        }
+      }
+    }
+    return ulThere;
+  };
+
   // cheat give all
   void CheatGiveAll(void) {
     // all weapons
-    m_iAvailableWeapons = 0x1EBFF;
+    m_iAvailableWeapons = WeaponsWithFiles(0x1EBFF);
 //    m_iAvailableWeapons &= ~WEAPONS_DISABLEDMASK;
     // ammo for all weapons
     m_iBullets = m_iMaxBullets;

@@ -153,6 +153,12 @@ enum EntityComponentType {  // DO NOT RENUMBER!
   ECT_SOUND     = 4,    // sound data
 };
 
+// Checking whether components can be loaded: while checking, one that can't is only counted
+// (e.g. a demo has only some weapons' files), instead of being a fatal error.
+ENGINE_API void BeginComponentCheck(void);
+// how many couldn't be loaded since BeginComponentCheck()
+ENGINE_API INDEX EndComponentCheck(void);
+
 class ENGINE_API CEntityComponent {
 public:
   /* Obtain the component. */

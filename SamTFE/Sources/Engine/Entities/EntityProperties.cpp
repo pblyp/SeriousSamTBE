@@ -611,11 +611,31 @@ void CEntityComponent::Obtain_t(void)  // throw char *
   // add to CRC
   AddToCRCTable();
 }
+// (see BeginComponentCheck())
+static BOOL _bCheckingComponents = FALSE;
+static INDEX _ctComponentsMissing = 0;
+
+void BeginComponentCheck(void)
+{
+  _bCheckingComponents = TRUE;
+  _ctComponentsMissing = 0;
+}
+
+INDEX EndComponentCheck(void)
+{
+  _bCheckingComponents = FALSE;
+  return _ctComponentsMissing;
+}
+
 void CEntityComponent::ObtainWithCheck(void)
 {
   try {
     Obtain_t();
   } catch (const char *strError) {
+    if (_bCheckingComponents) {
+      _ctComponentsMissing++;
+      return;
+    }
     FatalError("%s", strError);
   }
 }
