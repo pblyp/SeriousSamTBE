@@ -229,6 +229,12 @@ CTString astrNoYes[] = {
   RADIOTRANS( "No"),
   RADIOTRANS( "Yes"),
 };
+// (the order of the aim assist trigger's values in CControlsMenu)
+CTString astrAutoYesNo[] = {
+  RADIOTRANS( "Auto"),
+  RADIOTRANS( "Yes"),
+  RADIOTRANS( "No"),
+};
 CTString astrComputerInvoke[] = {
   RADIOTRANS( "Use"),
   RADIOTRANS( "Double-click use"),
@@ -444,6 +450,9 @@ CMGTrigger mgControlsInvertTrigger;
 CMGTrigger mgControlsSmoothTrigger;
 CMGTrigger mgControlsAccelTrigger;
 CMGTrigger mgControlsIFeelTrigger;
+CMGTrigger mgControlsAimAssistTrigger;
+// the player whose controls the menu shows
+static INDEX _iControlsPlayer = 0;
 CMGButton mgControlsPredefined;
 CMGButton mgControlsAdvanced;
 
@@ -1078,6 +1087,10 @@ void StartSinglePlayerGame(void)
 
   if (_pGame->NewGame( _pGame->gam_strCustomLevel, _pGame->gam_strCustomLevel, sp))
   {
+    // mark the level as visited (only levels entered from another one are marked otherwise),
+    // so it is listed under Custom Level
+    CTString strDummy("1");
+    SaveStringVar(CTFileName(_pGame->gam_strCustomLevel).NoExt()+".vis", strDummy);
     StopMenus();
     _gmRunningGameMode = GM_SINGLE_PLAYER;
   } else {
@@ -2303,13 +2316,13 @@ void InitializeMenus(void)
 
     // initialize and load menu textures
     _toPointer.SetData_t( CTFILENAME( "Textures\\General\\Pointer.tex"));
-#if _SE_DEMO || TECHTESTONLY
-    _toLogoMenuA.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256a_demo.tex"));
-    _toLogoMenuB.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256b_demo.tex"));
-#else
-    _toLogoMenuA.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256a.tex"));
-    _toLogoMenuB.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256b.tex"));
-#endif
+    if (_bDemoData) {
+      _toLogoMenuA.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256a_demo.tex"));
+      _toLogoMenuB.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256b_demo.tex"));
+    } else {
+      _toLogoMenuA.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256a.tex"));
+      _toLogoMenuB.SetData_t(  CTFILENAME( "Textures\\Logo\\sam_menulogo256b.tex"));
+    }
   }
   catch (const char *strError) {
     FatalError( strError);
@@ -2324,6 +2337,7 @@ void InitializeMenus(void)
   try
   {
     TRANSLATERADIOARRAY(astrNoYes);
+    TRANSLATERADIOARRAY(astrAutoYesNo);
     TRANSLATERADIOARRAY(astrComputerInvoke);
     TRANSLATERADIOARRAY(astrDisplayAPIRadioTexts);
     TRANSLATERADIOARRAY(astrDisplayPrefsRadioTexts);
@@ -3762,11 +3776,7 @@ void CSinglePlayerMenu::Initialize_t(void)
   gm_lhGadgets.AddTail( mgSingleCustom.mg_lnNode);
   mgSingleCustom.mg_pmgUp = &mgSingleNewGame;
   mgSingleCustom.mg_pmgDown = &mgSingleQuickLoad;
-  #if _SE_DEMO || TECHTESTONLY
-    mgSingleCustom.mg_pActivatedFunction = &DisabledFunction;
-  #else
-    mgSingleCustom.mg_pActivatedFunction = &StartSelectLevelFromSingle;
-  #endif
+  mgSingleCustom.mg_pActivatedFunction = &StartSelectLevelFromSingle;
 
   mgSingleQuickLoad.mg_strText = TRANS("QUICK LOAD");
   mgSingleQuickLoad.mg_bfsFontSize = BFS_LARGE;
@@ -4384,19 +4394,31 @@ void CControlsMenu::Initialize_t(void)
   TRIGGER_MG( mgControlsSmoothTrigger, 6.5, mgControlsInvertTrigger, mgControlsAccelTrigger,
               TRANS("SMOOTH AXIS"), astrNoYes);
   mgControlsSmoothTrigger.mg_strTip = TRANS("smooth mouse/joystick movements");
-  TRIGGER_MG( mgControlsAccelTrigger, 7.5, mgControlsSmoothTrigger, mgControlsIFeelTrigger,
+#ifdef PLATFORM_EMSCRIPTEN
+  // (no iFeel mouse in browsers: aim assist, for touch screens and gamepads, in its place)
+  CMGTrigger &mgControlsLastTrigger = mgControlsAimAssistTrigger;
+#else
+  CMGTrigger &mgControlsLastTrigger = mgControlsIFeelTrigger;
+#endif
+  TRIGGER_MG( mgControlsAccelTrigger, 7.5, mgControlsSmoothTrigger, mgControlsLastTrigger,
               TRANS("MOUSE ACCELERATION"), astrNoYes);
   mgControlsAccelTrigger.mg_strTip = TRANS("allow mouse acceleration");
+#ifdef PLATFORM_EMSCRIPTEN
+  TRIGGER_MG( mgControlsAimAssistTrigger, 8.5, mgControlsAccelTrigger, mgControlsPredefined,
+              TRANS("AIM ASSIST"), astrAutoYesNo);
+  mgControlsAimAssistTrigger.mg_strTip = TRANS("shots go to enemies near the crosshair (auto: with touch controls or a gamepad)");
+#else
   TRIGGER_MG( mgControlsIFeelTrigger, 8.5, mgControlsAccelTrigger, mgControlsPredefined,
               TRANS("ENABLE IFEEL"), astrNoYes);
   mgControlsIFeelTrigger.mg_strTip = TRANS("enable support for iFeel tactile feedback mouse");
+#endif
 
   mgControlsPredefined.mg_strText = TRANS("LOAD PREDEFINED SETTINGS");
   mgControlsPredefined.mg_iCenterI = 0;
   mgControlsPredefined.mg_boxOnScreen = BoxMediumRow(10, _fGlobalModAdjuster);
   mgControlsPredefined.mg_bfsFontSize = BFS_MEDIUM;
   gm_lhGadgets.AddTail( mgControlsPredefined.mg_lnNode);
-  mgControlsPredefined.mg_pmgUp   = &mgControlsIFeelTrigger;
+  mgControlsPredefined.mg_pmgUp   = &mgControlsLastTrigger;
   mgControlsPredefined.mg_pmgDown = &mgControlsButtons;
   mgControlsPredefined.mg_pActivatedFunction = &StartControlsLoadMenu;
   mgControlsPredefined.mg_strTip = TRANS("load one of several predefined control settings");
@@ -4410,6 +4432,7 @@ void CControlsMenu::StartMenu(void)
     iPlayer = _pGame->gm_aiMenuLocalPlayers[_iLocalPlayer];
   }
   _fnmControlsToCustomize.PrintF("Controls\\Controls%d.ctl", iPlayer);
+  _iControlsPlayer = iPlayer;
 
   ControlsMenuOn();
 
@@ -4440,13 +4463,20 @@ void CControlsMenu::ObtainActionSettings(void)
   mgControlsInvertTrigger.mg_iSelected = ctrls.ctrl_bInvertLook ? 1 : 0;
   mgControlsSmoothTrigger.mg_iSelected = ctrls.ctrl_bSmoothAxes ? 1 : 0;
   mgControlsAccelTrigger .mg_iSelected = _pShell->GetINDEX("inp_bAllowMouseAcceleration") ? 1 : 0;
-  mgControlsIFeelTrigger .mg_bEnabled = _pShell->GetINDEX("sys_bIFeelEnabled") ? 1 : 0;
-  mgControlsIFeelTrigger .mg_iSelected = _pShell->GetFLOAT("inp_fIFeelGain")>0 ? 1 : 0;
 
   mgControlsInvertTrigger.ApplyCurrentSelection();
   mgControlsSmoothTrigger.ApplyCurrentSelection();
   mgControlsAccelTrigger .ApplyCurrentSelection();
+
+#ifndef PLATFORM_EMSCRIPTEN
+  mgControlsIFeelTrigger .mg_bEnabled = _pShell->GetINDEX("sys_bIFeelEnabled") ? 1 : 0;
+  mgControlsIFeelTrigger .mg_iSelected = _pShell->GetFLOAT("inp_fIFeelGain")>0 ? 1 : 0;
   mgControlsIFeelTrigger .ApplyCurrentSelection();
+#else
+  const CPlayerSettings *pps = (const CPlayerSettings *)_pGame->gm_apcPlayers[_iControlsPlayer].pc_aubAppearance;
+  mgControlsAimAssistTrigger.mg_iSelected = !(pps->ps_ulFlags&PSF_AIMASSISTSET) ? 0 : (pps->ps_ulFlags&PSF_AIMASSIST) ? 1 : 2;
+  mgControlsAimAssistTrigger.ApplyCurrentSelection();
+#endif
 }
 
 void CControlsMenu::ApplyActionSettings(void)
@@ -4460,7 +4490,6 @@ void CControlsMenu::ApplyActionSettings(void)
   BOOL bInvert = mgControlsInvertTrigger.mg_iSelected != 0;
   BOOL bSmooth = mgControlsSmoothTrigger.mg_iSelected != 0;
   BOOL bAccel  = mgControlsAccelTrigger .mg_iSelected != 0;
-  BOOL bIFeel  = mgControlsIFeelTrigger .mg_iSelected != 0;
 
   if (INDEX(ctrls.ctrl_fSensitivity)!=INDEX(fSensitivity)) {
     ctrls.ctrl_fSensitivity = fSensitivity;
@@ -4468,8 +4497,26 @@ void CControlsMenu::ApplyActionSettings(void)
   ctrls.ctrl_bInvertLook = bInvert;
   ctrls.ctrl_bSmoothAxes = bSmooth;
   _pShell->SetINDEX("inp_bAllowMouseAcceleration", bAccel);
-  _pShell->SetFLOAT("inp_fIFeelGain", bIFeel ? 1.0f : 0.0f);
   ctrls.CalculateInfluencesForAllAxis();
+
+#ifndef PLATFORM_EMSCRIPTEN
+  BOOL bIFeel  = mgControlsIFeelTrigger .mg_iSelected != 0;
+  _pShell->SetFLOAT("inp_fIFeelGain", bIFeel ? 1.0f : 0.0f);
+#else
+  // aim assist: auto, yes or no (auto follows the input device, see CGame::ResolveAimAssist())
+  CPlayerSettings *pps = (CPlayerSettings *)_pGame->gm_apcPlayers[_iControlsPlayer].pc_aubAppearance;
+  const INDEX iAimAssist = mgControlsAimAssistTrigger.mg_iSelected;
+  pps->ps_ulFlags &= ~(PSF_AIMASSIST|PSF_AIMASSISTSET);
+  if (iAimAssist==1) {
+    pps->ps_ulFlags |= PSF_AIMASSISTSET|PSF_AIMASSIST;
+  } else if (iAimAssist==2) {
+    pps->ps_ulFlags |= PSF_AIMASSISTSET;
+  }
+  _pGame->ResolveAimAssist();
+  // (saved now: leaving the menu loads the players again; this also gives the players
+  // in the game their new setting)
+  _pGame->SavePlayersAndControls();
+#endif
 }
 
 // ------------------------ CLoadSaveMenu implementation
@@ -6246,7 +6293,12 @@ void CNetworkOpenMenu::Initialize_t(void)
   mgNetworkOpenTitle.mg_strText = TRANS("JOIN");
   gm_lhGadgets.AddTail( mgNetworkOpenTitle.mg_lnNode);
 
+#ifdef PLATFORM_EMSCRIPTEN
+  // in the browser, games are joined by the code of their room (see Engine/Base/Emscripten/WebNet.h)
+  mgNetworkOpenAddressLabel.mg_strText = TRANS("Room code:");
+#else
   mgNetworkOpenAddressLabel.mg_strText = TRANS("Address:");
+#endif
   mgNetworkOpenAddressLabel.mg_boxOnScreen = BoxMediumLeft(1, _fGlobalProfileAdjuster);
   mgNetworkOpenAddressLabel.mg_iCenterI = -1;
   gm_lhGadgets.AddTail( mgNetworkOpenAddressLabel.mg_lnNode);
@@ -6260,12 +6312,16 @@ void CNetworkOpenMenu::Initialize_t(void)
   mgNetworkOpenAddress.mg_pmgUp = &mgNetworkOpenJoin;
   mgNetworkOpenAddress.mg_pmgDown = &mgNetworkOpenPort;
   mgNetworkOpenAddress.mg_strTip = TRANS("specify server address");
+#ifdef PLATFORM_EMSCRIPTEN
+  mgNetworkOpenAddress.mg_strTip = TRANS("the code shown to the player who started the game");
+  // (no ports)
+  mgNetworkOpenAddress.mg_pmgDown = &mgNetworkOpenJoin;
+#endif
   gm_lhGadgets.AddTail( mgNetworkOpenAddress.mg_lnNode);
 
   mgNetworkOpenPortLabel.mg_strText = TRANS("Port:");
   mgNetworkOpenPortLabel.mg_boxOnScreen = BoxMediumLeft(2, _fGlobalProfileAdjuster);
   mgNetworkOpenPortLabel.mg_iCenterI = -1;
-  gm_lhGadgets.AddTail( mgNetworkOpenPortLabel.mg_lnNode);
 
   mgNetworkOpenPort.mg_strText = "";
   mgNetworkOpenPort.mg_ctMaxStringLen = 10;
@@ -6276,10 +6332,16 @@ void CNetworkOpenMenu::Initialize_t(void)
   mgNetworkOpenPort.mg_pmgUp = &mgNetworkOpenAddress;
   mgNetworkOpenPort.mg_pmgDown = &mgNetworkOpenJoin;
   mgNetworkOpenPort.mg_strTip = TRANS("specify server address");
+#ifndef PLATFORM_EMSCRIPTEN
+  gm_lhGadgets.AddTail( mgNetworkOpenPortLabel.mg_lnNode);
   gm_lhGadgets.AddTail( mgNetworkOpenPort.mg_lnNode);
+#endif
 
   mgNetworkOpenJoin.mg_boxOnScreen = BoxMediumMiddle(3, _fGlobalProfileAdjuster);
   mgNetworkOpenJoin.mg_pmgUp = &mgNetworkOpenPort;
+#ifdef PLATFORM_EMSCRIPTEN
+  mgNetworkOpenJoin.mg_pmgUp = &mgNetworkOpenAddress;
+#endif
   mgNetworkOpenJoin.mg_pmgDown = &mgNetworkOpenAddress;
   mgNetworkOpenJoin.mg_strText = TRANS("Join");
   gm_lhGadgets.AddTail( mgNetworkOpenJoin.mg_lnNode);

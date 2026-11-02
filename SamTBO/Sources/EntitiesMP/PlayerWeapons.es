@@ -240,6 +240,8 @@ static INDEX hud_bCrosshairColoring = TRUE;
 static FLOAT hud_fCrosshairScale    = 1.0f;
 static FLOAT hud_fCrosshairOpacity  = 1.0f;
 static FLOAT hud_fCrosshairRatio    = 0.5f;  // max distance size ratio
+// print where aim assist turns shots (see CPlayerWeapons::ApplyAimAssist())
+static INDEX dbg_bAimAssist = FALSE;
 // misc HUD vars
 static INDEX hud_bShowPlayerName = TRUE;
 static INDEX hud_bShowCoords     = FALSE;
@@ -479,6 +481,7 @@ void CPlayerWeapons_Init(void) {
   _pShell->DeclareSymbol("persistent user FLOAT hud_fCrosshairOpacity;",  &hud_fCrosshairOpacity);
                                   
   _pShell->DeclareSymbol("persistent user INDEX hud_bShowPlayerName;", &hud_bShowPlayerName);
+  _pShell->DeclareSymbol("user INDEX dbg_bAimAssist;", &dbg_bAimAssist);
   _pShell->DeclareSymbol("persistent user INDEX hud_bShowCoords;",     &hud_bShowCoords);
 
   _pShell->DeclareSymbol("persistent user FLOAT plr_tmSnoopingTime;",  &plr_tmSnoopingTime);
@@ -639,6 +642,12 @@ properties:
 260 FLOAT m_fWeaponDrawPowerOld = 0,
 261 FLOAT m_fWeaponDrawPower = 0,
 262 FLOAT m_tmDrawStartTime = 0.0f,
+// aim assist: how far the crosshair and the weapon are turned toward its target (degrees)
+263 FLOAT m_fAimAssistH = 0.0f,
+264 FLOAT m_fAimAssistP = 0.0f,
+265 FLOAT m_fAimAssistLastH = 0.0f,     // (last tick's, for lerping)
+266 FLOAT m_fAimAssistLastP = 0.0f,
+267 CEntityPointer m_penAimAssist,      // the target (for the crosshair's distance and colour)
 
 270 FLOAT m_tmFlamerStart=1e6,
 271 FLOAT m_tmFlamerStop=1e9,
@@ -1016,6 +1025,11 @@ functions:
       BeginModelRenderingView(apr, pdp);
 
       WeaponMovingOffset(plWeaponMirror.pl_PositionVector);
+      // turned toward the aim assist target (the other way round, as it is mirrored)
+      FLOAT fAimMirrorH, fAimMirrorP;
+      AimAssistAngles(fAimMirrorH, fAimMirrorP);
+      plWeaponMirror.pl_OrientationAngle(1) -= fAimMirrorH;
+      plWeaponMirror.pl_OrientationAngle(2) += fAimMirrorP;
       plWeaponMirror.RelativeToAbsoluteSmooth(plView);
       rmMain.SetObjectPlacement(plWeaponMirror);
 
@@ -1050,6 +1064,11 @@ functions:
     BeginModelRenderingView(apr, pdp);
 
     WeaponMovingOffset(plWeapon.pl_PositionVector);
+    // turned toward the aim assist target
+    FLOAT fAimH, fAimP;
+    AimAssistAngles(fAimH, fAimP);
+    plWeapon.pl_OrientationAngle(1) += fAimH;
+    plWeapon.pl_OrientationAngle(2) += fAimP;
     plWeapon.RelativeToAbsoluteSmooth(plView);
     rmMain.SetObjectPlacement(plWeapon);
 
@@ -1092,10 +1111,18 @@ functions:
   void WeaponMovingOffset(FLOAT3D &plPos)
   {
     CPlayerAnimator &plan = (CPlayerAnimator&)*((CPlayer&)*m_penPlayer).m_penAnimator;
-    FLOAT fXOffset = Lerp(plan.m_fMoveLastBanking, plan.m_fMoveBanking, _pTimer->GetLerpFactor()) * -0.02f;
     FLOAT fYOffset = Lerp(plan.m_fWeaponYLastOffset, plan.m_fWeaponYOffset, _pTimer->GetLerpFactor()) * 0.15f;
-    fYOffset += (fXOffset * fXOffset) * 30.0f;
-    plPos(1) += fXOffset;
+    if (plan.NewWeaponBobbing()) {
+      // pushed forward with the steps (speed-based bobbing)
+      plPos(3) -= plan.StepBob()*0.4f;
+    } else {
+      // swaying to the sides (the original, legacy bobbing), as much as the player's speed
+      // (full at running speed, 10 m/s)
+      const FLOAT fSpeedFactor = Clamp(plan.GroundSpeed()/10.0f, 0.0f, 1.0f);
+      FLOAT fXOffset = Lerp(plan.m_fMoveLastBanking, plan.m_fMoveBanking, _pTimer->GetLerpFactor()) * -0.02f * fSpeedFactor;
+      fYOffset += (fXOffset * fXOffset) * 30.0f;
+      plPos(1) += fXOffset;
+    }
     plPos(2) += fYOffset;
     // apply grenade launcher pumping
     if( m_iCurrentWeapon == WEAPON_GRENADELAUNCHER)
@@ -1303,6 +1330,48 @@ functions:
     if( m_tmTargetingStarted>0 && plr_tmSnoopingDelay>0 && tmDelta>plr_tmSnoopingDelay) {
       m_tmSnoopingStarted = tmNow;
     }
+
+    UpdateAimAssistTurn();
+  }
+
+  // aim assist: turn the crosshair and the weapon toward the target that shots would go to,
+  // gliding there (and back when there is none)
+  void UpdateAimAssistTurn(void)
+  {
+    m_fAimAssistLastH = m_fAimAssistH;
+    m_fAimAssistLastP = m_fAimAssistP;
+    FLOAT fWantH = 0.0f;
+    FLOAT fWantP = 0.0f;
+    FLOAT3D vTarget;
+    CEntity *penTarget = NULL;
+    const FLOAT fRange = AimAssistRange();
+    if (fRange>0.0f && AimAssistTarget(fRange, vTarget, penTarget)) {
+      // where the target is seen from the middle of the view
+      CPlacement3D plEye;
+      CalcEyePlacement(plEye);
+      FLOATmatrix3D m;
+      MakeRotationMatrixFast(m, plEye.pl_OrientationAngle);
+      const FLOAT3D vToTarget = vTarget-plEye.pl_PositionVector;
+      const FLOAT fZ = ClampDn(vToTarget%(-m.GetColumn(3)), 0.1f);
+      fWantH = Clamp(-ATan((vToTarget%m.GetColumn(1))/fZ), -10.0f, 10.0f);
+      fWantP = Clamp(ATan((vToTarget%m.GetColumn(2))/fZ), -10.0f, 10.0f);
+      m_penAimAssist = penTarget;
+    }
+    m_fAimAssistH += (fWantH-m_fAimAssistH)*0.5f;
+    m_fAimAssistP += (fWantP-m_fAimAssistP)*0.5f;
+    // (back in the middle: no target any more)
+    if (Abs(m_fAimAssistH)<0.01f && Abs(m_fAimAssistP)<0.01f) {
+      m_fAimAssistH = m_fAimAssistP = 0.0f;
+      m_penAimAssist = NULL;
+    }
+  }
+
+  // how far the crosshair and the weapon are turned toward the aim assist target now (degrees)
+  void AimAssistAngles(FLOAT &fH, FLOAT &fP)
+  {
+    const FLOAT fLerp = _pTimer->GetLerpFactor();
+    fH = Lerp(m_fAimAssistLastH, m_fAimAssistH, fLerp);
+    fP = Lerp(m_fAimAssistLastP, m_fAimAssistP, fLerp);
   }
 
 
@@ -1372,6 +1441,36 @@ functions:
       vOnScreen(1) = (FLOAT)pdp->GetWidth()  *0.5f;
       vOnScreen(2) = (FLOAT)pdp->GetHeight() *0.5f;
       //fDistance    = 100.0f;
+    }
+
+    // aim assist: on its target (gliding there and back)
+    FLOAT fAimH, fAimP;
+    AimAssistAngles(fAimH, fAimP);
+    if (GetPlayer()->m_iViewState==PVT_PLAYEREYES && (fAimH!=0.0f || fAimP!=0.0f)) {
+      FLOAT fAimDistance = 50.0f;
+      CEntity *penAim = m_penAimAssist;
+      if (penAim!=NULL) {
+        FLOATaabbox3D box;
+        penAim->GetBoundingBox(box);
+        fAimDistance = (box.Center()-plViewSource.pl_PositionVector).Length();
+      }
+      CPlacement3D plAim(FLOAT3D(0.0f, 0.0f, 0.0f), ANGLE3D(fAimH, fAimP, 0.0f));
+      plAim.RelativeToAbsolute(plViewSource);
+      FLOAT3D vAimDir;
+      AnglesToDirectionVector(plAim.pl_OrientationAngle, vAimDir);
+      prProjection.ViewerPlacementL() = plViewSource;
+      prProjection.ObjectPlacementL() = CPlacement3D( FLOAT3D(0.0f, 0.0f, 0.0f), ANGLE3D( 0, 0, 0));
+      prProjection.Prepare();
+      prProjection.ProjectCoordinate(plViewSource.pl_PositionVector+vAimDir*fAimDistance, vOnScreen);
+      fDistance = fAimDistance;
+      // its health through the crosshair colour, as when aiming at it
+      if (hud_bCrosshairColoring && penAim!=NULL && (penAim->GetFlags()&ENF_ALIVE)
+       && IsDerivedFromClass(penAim, "Enemy Base")) {
+        const FLOAT fHealth = ((CEnemyBase*)penAim)->GetHealth() / ((CEnemyBase*)penAim)->m_fMaxHealth;
+             if( fHealth<0.25f) { colCrosshair = C_RED;    }
+        else if( fHealth<0.60f) { colCrosshair = C_YELLOW; }
+        else                    { colCrosshair = C_GREEN;  }
+      }
     }
     
     // clamp console variables
@@ -1866,6 +1965,131 @@ functions:
     plPos.RelativeToAbsoluteSmooth(m_penPlayer->GetPlacement());
   };
 
+  // placement of the player's eyes (the view, whose middle the crosshair is in)
+  void CalcEyePlacement(CPlacement3D &plEye) {
+    plEye = ((CPlayer &)*m_penPlayer).en_plViewpoint;
+    plEye.pl_PositionVector(2) += ((CPlayerAnimator&)*((CPlayer &)*m_penPlayer).m_penAnimator).m_fEyesYOffset;
+    plEye.RelativeToAbsolute(m_penPlayer->GetPlacement());
+  };
+
+  // Aim assist (for touch screens and gamepads, like the console version's): a shot goes to
+  // the enemy nearest to the crosshair whose bounding box overlaps a square around it, 150%
+  // the size of the crosshair (32 pixels at 640 wide, in a 90 degree view: tangent 0.05 to
+  // the side). The square is fixed (not the player's crosshair size or view), so that it is
+  // the same on all computers of a network game. Only for the knife, the chainsaw and the weapons
+  // whose shots hit at once (see AimAssistRange()): shots that fly could go wrong when turned.
+  // Returns where to aim, if anywhere.
+  BOOL AimAssistTarget(FLOAT fRange, FLOAT3D &vTarget, CEntity *&penTarget) {
+    const FLOAT fZone = 1.5f * 0.05f;
+    if (!(GetPlayer()->GetSettings()->ps_ulFlags&PSF_AIMASSIST)) {
+      return FALSE;
+    }
+    // (on target already)
+    if (m_penRayHit!=NULL && (m_penRayHit->GetFlags()&ENF_ALIVE) && IsDerivedFromClass(m_penRayHit, "Enemy Base")) {
+      return FALSE;
+    }
+    CPlacement3D plEye;
+    CalcEyePlacement(plEye);
+    const FLOAT3D &vEye = plEye.pl_PositionVector;
+    FLOATmatrix3D m;
+    MakeRotationMatrixFast(m, plEye.pl_OrientationAngle);
+    const FLOAT3D vRight = m.GetColumn(1);
+    const FLOAT3D vUp = m.GetColumn(2);
+    const FLOAT3D vFront = -m.GetColumn(3);
+
+    BOOL bFound = FALSE;
+    FLOAT fBestOff = UpperLimit(0.0f);
+    {FOREACHINDYNAMICCONTAINER(GetWorld()->wo_cenEntities, CEntity, iten) {
+      CEntity *pen = iten;
+      if ((pen->GetFlags()&(ENF_ALIVE|ENF_DELETED))!=ENF_ALIVE || !IsDerivedFromClass(pen, "Enemy Base")
+       || ((CEnemyBase *)pen)->m_bTemplate) {
+        continue;
+      }
+      FLOATaabbox3D box;
+      pen->GetBoundingBox(box);
+      const FLOAT3D vCenter = box.Center();
+      const FLOAT3D vSize = box.Size();
+      const FLOAT3D vToCenter = vCenter-vEye;
+      const FLOAT fDistance = vToCenter.Length();
+      const FLOAT fZ = vToCenter%vFront;
+      if (fZ<1.0f || fDistance>fRange) {
+        continue;
+      }
+      // where it is seen from the middle of the view (tangents), and how big
+      const FLOAT fX = (vToCenter%vRight)/fZ;
+      const FLOAT fY = (vToCenter%vUp)/fZ;
+      const FLOAT fRadius = 0.5f*Min(Min(vSize(1), vSize(2)), vSize(3))/fZ;
+      if (Abs(fX)-fRadius>fZone || Abs(fY)-fRadius>fZone) {
+        continue;
+      }
+      const FLOAT fOff = Sqrt(fX*fX+fY*fY);
+      if (fOff>=fBestOff) {
+        continue;
+      }
+      // the point of its box (shrunk a bit) nearest to where the crosshair is at that distance
+      const FLOAT3D vAlong = vEye+vFront*fDistance;
+      FLOAT3D vAim;
+      for (INDEX i=1; i<=3; i++) {
+        vAim(i) = Clamp(vAlong(i), vCenter(i)-0.4f*vSize(i), vCenter(i)+0.4f*vSize(i));
+      }
+      // only if it can be seen
+      CCastRay crRay(m_penPlayer, vEye, vAim);
+      crRay.cr_bHitTranslucentPortals = FALSE;
+      crRay.cr_bPhysical = FALSE;
+      crRay.cr_ttHitModels = CCastRay::TT_NONE;
+      GetWorld()->CastRay(crRay);
+      if (crRay.cr_penHit!=NULL) {
+        continue;
+      }
+      fBestOff = fOff;
+      vTarget = vAim;
+      penTarget = pen;
+      bFound = TRUE;
+    }}
+    return bFound;
+  };
+
+  // how far aim assist reaches with the current weapon (0: not with this weapon)
+  FLOAT AimAssistRange(void) {
+    const INDEX iWeapon = m_iCurrentWeapon;
+    // (the knife's reach, and the target's size: the distance is to its centre)
+    if (iWeapon==WEAPON_KNIFE || iWeapon==WEAPON_CHAINSAW) {
+      return 3.0f+2.0f;
+    }
+    if (iWeapon==WEAPON_COLT || iWeapon==WEAPON_DOUBLECOLT
+     || iWeapon==WEAPON_SINGLESHOTGUN || iWeapon==WEAPON_DOUBLESHOTGUN
+     || iWeapon==WEAPON_TOMMYGUN || iWeapon==WEAPON_MINIGUN) {
+      return 500.0f;
+    }
+    // (not zoomed in: that is for aiming precisely)
+    if (iWeapon==WEAPON_SNIPER && !m_bSniping) {
+      return 1000.0f;
+    }
+    return 0.0f;
+  };
+
+  // turn a shot to the target of the aim assist, if any
+  void ApplyAimAssist(CPlacement3D &plShot, FLOAT fRange) {
+    FLOAT3D vTarget;
+    CEntity *penTarget = NULL;
+    if (!AimAssistTarget(fRange, vTarget, penTarget)) {
+      return;
+    }
+    FLOAT3D vDir = vTarget-plShot.pl_PositionVector;
+    if (vDir.Length()<0.01f) {
+      return;
+    }
+    if (dbg_bAimAssist) {
+      CPrintF("aim assist: %s at %.1f m\n", (const char *)penTarget->GetClass()->ec_pdecDLLClass->dec_strName,
+        vDir.Length());
+    }
+    vDir.Normalize();
+    ANGLE3D aShot;
+    DirectionVectorToAnglesNoSnap(vDir, aShot);
+    plShot.pl_OrientationAngle(1) = aShot(1);
+    plShot.pl_OrientationAngle(2) = aShot(2);
+  };
+
   // setup 3D sound parameters
   void Setup3DSoundParameters(void) {
     CPlayer &pl = (CPlayer&)*m_penPlayer;
@@ -1889,6 +2113,8 @@ functions:
     // knife start position
     CPlacement3D plKnife;
     CalcWeaponPosition(FLOAT3D(fX, fY, 0), plKnife, TRUE);
+    // (the distance to the target is to its centre)
+    ApplyAimAssist(plKnife, fRange+2.0f);
 
     // create a set of rays to test
     const FLOAT3D &vBase = plKnife.pl_PositionVector;
@@ -1994,6 +2220,8 @@ functions:
     // knife start position
     CPlacement3D plKnife;
     CalcWeaponPosition(FLOAT3D(fX, fY, 0), plKnife, TRUE);
+    // (the distance to the target is to its centre)
+    ApplyAimAssist(plKnife, fRange+2.0f);
 
     // create a set of rays to test
     const FLOAT3D &vBase = plKnife.pl_PositionVector;
@@ -2124,9 +2352,12 @@ functions:
   };
 
   // prepare Bullet
-  void PrepareSniperBullet(FLOAT fX, FLOAT fY, FLOAT fDamage, FLOAT fImprecission) {
+  void PrepareSniperBullet(FLOAT fX, FLOAT fY, FLOAT fRange, FLOAT fDamage, FLOAT fImprecission) {
     // bullet start position
     CalcWeaponPositionImprecise(FLOAT3D(fX, fY, 0), plBullet, TRUE, fImprecission);
+    if (!m_bSniping) {
+      ApplyAimAssist(plBullet, fRange);
+    }
     // create bullet
     penBullet = CreateEntity(plBullet, CLASS_BULLET);
     m_vBulletSource = plBullet.pl_PositionVector;
@@ -2138,9 +2369,10 @@ functions:
   };
 
   // prepare Bullet
-  void PrepareBullet(FLOAT fX, FLOAT fY, FLOAT fDamage) {
+  void PrepareBullet(FLOAT fX, FLOAT fY, FLOAT fRange, FLOAT fDamage) {
     // bullet start position
     CalcWeaponPosition(FLOAT3D(fX, fY, 0), plBullet, TRUE);
+    ApplyAimAssist(plBullet, fRange);
     // create bullet
     penBullet = CreateEntity(plBullet, CLASS_BULLET);
     // init bullet
@@ -2152,7 +2384,7 @@ functions:
 
   // fire one bullet
   void FireSniperBullet(FLOAT fX, FLOAT fY, FLOAT fRange, FLOAT fDamage, FLOAT fImprecission) {
-    PrepareSniperBullet(fX, fY, fDamage, fImprecission);
+    PrepareSniperBullet(fX, fY, fRange, fDamage, fImprecission);
     ((CBullet&)*penBullet).CalcTarget(fRange);
     ((CBullet&)*penBullet).m_fBulletSize = 0.1f;
     // launch bullet
@@ -2182,7 +2414,7 @@ functions:
 
   // fire one bullet
   void FireOneBullet(FLOAT fX, FLOAT fY, FLOAT fRange, FLOAT fDamage) {
-    PrepareBullet(fX, fY, fDamage);
+    PrepareBullet(fX, fY, fRange, fDamage);
     ((CBullet&)*penBullet).CalcTarget(fRange);
     ((CBullet&)*penBullet).m_fBulletSize = 0.1f;
     // launch bullet
@@ -2193,7 +2425,7 @@ functions:
   // fire bullets (x offset is used for double shotgun)
   void FireBullets(FLOAT fX, FLOAT fY, FLOAT fRange, FLOAT fDamage, INDEX iBullets,
     FLOAT *afPositions, FLOAT fStretch, FLOAT fJitter) {
-    PrepareBullet(fX, fY, fDamage);
+    PrepareBullet(fX, fY, fRange, fDamage);
     ((CBullet&)*penBullet).CalcTarget(fRange);
     ((CBullet&)*penBullet).m_fBulletSize = GetSP()->sp_bCooperative ? 0.1f : 0.3f;
     // launch slugs
@@ -2213,7 +2445,7 @@ functions:
     FLOAT fJitter, FLOAT fBulletSize)
   {
     fJitter*=fRange;  // jitter relative to range
-    PrepareBullet(fX, fY, fDamage);
+    PrepareBullet(fX, fY, fRange, fDamage);
     ((CBullet&)*penBullet).CalcTarget(fRange);
     ((CBullet&)*penBullet).m_fBulletSize = fBulletSize;
     ((CBullet&)*penBullet).CalcJitterTarget(fJitter);

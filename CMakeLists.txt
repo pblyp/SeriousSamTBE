@@ -146,3 +146,4 @@ endif(LINUX)
 
 add_subdirectory(SamTFE/Sources)
 add_subdirectory(SamTSE/Sources)
+add_subdirectory(SamTBO/Sources)

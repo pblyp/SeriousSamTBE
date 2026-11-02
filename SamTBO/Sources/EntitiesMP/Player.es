@@ -376,6 +376,17 @@ INDEX hud_bShowMatchInfo = TRUE;
 INDEX hud_bWeaponsIconScale = 1; // HUD weapons icons scale: 0 - small, 1 - big
 
 FLOAT plr_fBreathingStrength = 0.0f;
+// speed-based view and weapon bobbing, or the original ones: the view tilts when moving sideways
+// (plr_fViewRoll*, see CPlayerAnimator::ViewRoll()), the weapon is pushed forward with the steps
+// (plr_fViewBob*, see CPlayerAnimator::StepBob())
+INDEX plr_bLegacyViewBobbing = FALSE;
+INDEX plr_bLegacyWeaponBobbing = TRUE;
+FLOAT plr_fViewBob = 0.02f;         // bob height per m/s of speed
+FLOAT plr_fViewBobCycle = 0.6f;     // seconds per step
+FLOAT plr_fViewBobUp = 0.5f;        // part of the step going up
+FLOAT plr_fViewRollAngle = 2.0f;    // tilt when running sideways at full speed (degrees)
+FLOAT plr_fViewRollMinSpeed = 3.0f;  // sideways speed where the tilt starts (m/s)
+FLOAT plr_fViewRollMaxSpeed = 10.0f; // sideways speed of the full tilt (m/s; running)
 extern FLOAT plr_tmSnoopingTime;
 INDEX cht_bKillFinalBoss = FALSE;
 INDEX cht_bDebugFinalBoss = FALSE;
@@ -781,6 +792,14 @@ void CPlayer_OnInitClass(void)
   _pShell->DeclareSymbol("persistent user FLOAT hud_tmWeaponsOnScreen;",  (void *) &hud_tmWeaponsOnScreen);
   _pShell->DeclareSymbol("persistent user FLOAT hud_tmLatencySnapshot;",  (void *) &hud_tmLatencySnapshot);
   _pShell->DeclareSymbol("persistent user FLOAT plr_fBreathingStrength;", (void *) &plr_fBreathingStrength);
+  _pShell->DeclareSymbol("persistent user INDEX plr_bLegacyViewBobbing;", (void *) &plr_bLegacyViewBobbing);
+  _pShell->DeclareSymbol("persistent user INDEX plr_bLegacyWeaponBobbing;", (void *) &plr_bLegacyWeaponBobbing);
+  _pShell->DeclareSymbol("persistent user FLOAT plr_fViewBob;", (void *) &plr_fViewBob);
+  _pShell->DeclareSymbol("persistent user FLOAT plr_fViewBobCycle;", (void *) &plr_fViewBobCycle);
+  _pShell->DeclareSymbol("persistent user FLOAT plr_fViewBobUp;", (void *) &plr_fViewBobUp);
+  _pShell->DeclareSymbol("persistent user FLOAT plr_fViewRollAngle;", (void *) &plr_fViewRollAngle);
+  _pShell->DeclareSymbol("persistent user FLOAT plr_fViewRollMinSpeed;", (void *) &plr_fViewRollMinSpeed);
+  _pShell->DeclareSymbol("persistent user FLOAT plr_fViewRollMaxSpeed;", (void *) &plr_fViewRollMaxSpeed);
   _pShell->DeclareSymbol("INDEX cht_bKillFinalBoss;",  (void *) &cht_bKillFinalBoss);
   _pShell->DeclareSymbol("INDEX cht_bDebugFinalBoss;", (void *) &cht_bDebugFinalBoss);
   _pShell->DeclareSymbol("INDEX cht_bDumpFinalBossData;", (void *) &cht_bDumpFinalBossData);
@@ -897,18 +916,20 @@ FLOAT TopArmor(void)
 }
 FLOAT MaxHealth(void)
 {
+  FLOAT fFactor = GetSP()->sp_bDoubleHealth ? 2.0f : 1.0f;
   if (GetSP()->sp_gdGameDifficulty<=CSessionProperties::GD_EASY) {
-    return 300;
+    return 300*fFactor;
   } else {
-    return 200;
+    return 200*fFactor;
   }
 }
 FLOAT TopHealth(void)
 {
+  FLOAT fFactor = GetSP()->sp_bDoubleHealth ? 2.0f : 1.0f;
   if (GetSP()->sp_gdGameDifficulty<=CSessionProperties::GD_EASY) {
-    return 200;
+    return 200*fFactor;
   } else {
-    return 100;
+    return 100*fFactor;
   }
 }
 

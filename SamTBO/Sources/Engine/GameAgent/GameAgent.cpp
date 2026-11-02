@@ -138,7 +138,8 @@ typedef struct sockaddr    SOCKADDR;
 #ifdef FIRST_ENCOUNTER  // First Encounter
 #define SERIOUSSAMSTR       "serioussam"
 #else
-#define SERIOUSSAMSTR       "serioussamse"
+// (not The Second Encounter's name: its players couldn't join these games)
+#define SERIOUSSAMSTR       "serioussamtbo"
 #endif
 
 #include <Engine/GameAgent/MSLegacy.h>
@@ -461,9 +462,9 @@ void _sendHeartbeat(INDEX iChallenge)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamse", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamse\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbo\n", _datetime);
     #endif
   }
   _sendPacket(strPacket);
@@ -491,6 +492,10 @@ void CServerRequest::Clear(void)
 /// Initialize GameAgent.
 extern void GameAgent_ServerInit(void)
 {
+#ifdef PLATFORM_EMSCRIPTEN
+  // no master servers or LAN search in the browser (games are joined by room code)
+  return;
+#endif
   // join
   _bServer = TRUE;
   _bInitialized = TRUE;
@@ -504,9 +509,9 @@ extern void GameAgent_ServerInit(void)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamse", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamse\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbo\n", _datetime);
     #endif
     _sendPacketB(strPacket);
   }
@@ -526,9 +531,9 @@ extern void GameAgent_ServerEnd(void)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\\statechanged\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamse\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamse\\statechanged\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbo\\statechanged\n", _datetime);
     #endif
     _sendPacket(strPacket);
   }
@@ -820,9 +825,9 @@ extern void GameAgent_ServerStateChanged(void)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\\statechanged\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamse\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamse\\statechanged\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbo\\statechanged\n", _datetime);
     #endif
     _sendPacket(strPacket);
   }
@@ -831,6 +836,10 @@ extern void GameAgent_ServerStateChanged(void)
 /// Request serverlist enumeration.
 extern void GameAgent_EnumTrigger(BOOL bInternet)
 {
+#ifdef PLATFORM_EMSCRIPTEN
+  // no master servers or LAN search in the browser (games are joined by room code)
+  return;
+#endif
 
   if ( _pNetwork->ga_bEnumerationChange ) {
     return;
@@ -1600,7 +1609,7 @@ void*        _MS_Thread(void *arg) {
             #ifdef FIRST_ENCOUNTER  // First Encounter
             sPch = strstr(_szBuffer, "\\gamename\\serioussam\\");
             #else
-            sPch = strstr(_szBuffer, "\\gamename\\serioussamse\\");
+            sPch = strstr(_szBuffer, "\\gamename\\serioussamtbo\\");
             #endif
             if(!sPch) {
                 DateTime(_datetime);
@@ -1814,7 +1823,7 @@ void*        _LocalNet_Thread(void *arg) {
             #ifdef FIRST_ENCOUNTER  // First Encounter
             sPch = strstr(_szBuffer, "\\gamename\\serioussam\\");
             #else
-            sPch = strstr(_szBuffer, "\\gamename\\serioussamse\\");
+            sPch = strstr(_szBuffer, "\\gamename\\serioussamtbo\\");
             #endif
             if(!sPch) {
                 DateTime(_datetime);
