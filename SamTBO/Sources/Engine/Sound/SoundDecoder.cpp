@@ -93,7 +93,37 @@ public:
   ALhandle mpeg_hDecoder;  // the decoder handle
   FLOAT mpeg_fSecondsLen;  // length of sound in seconds
   WAVEFORMATEX mpeg_wfeFormat; // format of sound
+  CTFileName mpeg_fnmTemporary; // its copy out of the archive (web version), deleted when done
 };
+
+#ifdef PLATFORM_EMSCRIPTEN
+// In the web version the page may keep archives in the browser's storage, read through the
+// engine's archive reader (see Engine/Base/Emscripten/WebArchive.cpp), which amp11lib can't use:
+// an mp3 in an archive is copied into a file of its own in memory while it plays.
+static CTFileName CopyOutOfArchive_t(INDEX iZipHandle, SLONG slSize)
+{
+  static INDEX _iCopy = 0;
+  CTFileName fnmCopy;
+  fnmCopy.PrintF("/tmp/sound%d.mp3", _iCopy++);
+  UBYTE *pub = (UBYTE *)AllocMemory(slSize);
+  try {
+    UNZIPReadBlock_t(iZipHandle, pub, 0, slSize);
+  } catch (const char *) {
+    FreeMemory(pub);
+    throw;
+  }
+  FILE *pFile = fopen(fnmCopy, "wb");
+  BOOL bWritten = pFile!=NULL && fwrite(pub, 1, slSize, pFile)==(size_t)slSize;
+  if (pFile!=NULL) {
+    fclose(pFile);
+  }
+  FreeMemory(pub);
+  if (!bWritten) {
+    ThrowF_t(TRANS("cannot copy the encoded audio out of its archive"));
+  }
+  return fnmCopy;
+}
+#endif
 
 
 // ------------------------------------ Ogg Vorbis
@@ -430,6 +460,14 @@ CSoundDecoder::CSoundDecoder(const CTFileName &fnm)
         if (bCompressed) {
           ThrowF_t(TRANS("encoded audio in archives must not be compressed!\n"));
         }
+#ifdef PLATFORM_EMSCRIPTEN
+        // (copied out of the archive, see CopyOutOfArchive_t())
+        sdc_pmpeg->mpeg_fnmTemporary = CopyOutOfArchive_t(iZipHandle, slSizeUncompressed);
+        sdc_pmpeg->mpeg_hFile = palOpenInputFile(sdc_pmpeg->mpeg_fnmTemporary);
+        if (sdc_pmpeg->mpeg_hFile==0) {
+          ThrowF_t(TRANS("cannot open encoded audio file"));
+        }
+#else
         // open the zip file
         sdc_pmpeg->mpeg_hMainFile = palOpenInputFile(fnmZip);
         // if error
@@ -442,6 +480,7 @@ CSoundDecoder::CSoundDecoder(const CTFileName &fnm)
         if (sdc_pmpeg->mpeg_hFile==0) {
           ThrowF_t(TRANS("cannot open encoded audio file"));
         }
+#endif
 
       // if not in zip
       } else if (iFileType==EFP_FILE) {
@@ -517,6 +556,9 @@ void CSoundDecoder::Clear(void)
     sdc_pmpeg->mpeg_hMainFile = 0;
     sdc_pmpeg->mpeg_hFile = 0;
     sdc_pmpeg->mpeg_hDecoder = 0;
+    if (sdc_pmpeg->mpeg_fnmTemporary!="") {
+      remove(sdc_pmpeg->mpeg_fnmTemporary);
+    }
     delete sdc_pmpeg;
     sdc_pmpeg = NULL;
 
