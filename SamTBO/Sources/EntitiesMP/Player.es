@@ -2328,9 +2328,26 @@ functions:
   // second until the last has gone off the screen)
   FLOAT TFECreditsLength(void)
   {
-    const INDEX ctLines = CountTFETextLines(CTFILENAME("Data\\Credits.txt"))
-                        + CountTFETextLines(CTFILENAME("Data\\Credits_End.txt"));
+    INDEX ctLines = CountTFETextLines(CTFILENAME("Data\\Credits.txt"));
+    if (ctLines>0) {
+      ctLines += CountTFETextLines(CTFILENAME("Data\\Credits_End.txt"));
+    // (The First Encounter's demo has only the demo's credits, see Credits_On())
+    } else {
+      ctLines = CountTFETextLines(CTFILENAME("Data\\Credits_Demo.txt"));
+    }
     return (ctLines+24)/2.0f;
+  }
+
+  // where The Second Encounter starts, after The First Encounter's end: its first level, or with
+  // the demos, its demo's (Palenque)
+  CTFileName SecondEncounterFirstLevel(void)
+  {
+    const CTFileName fnmFirst = CTFILENAME("Levels\\LevelsMP\\1_0_InTheLastEpisode.wld");
+    const CTFileName fnmDemo = CTFILENAME("Levels\\LevelsMP\\Demo\\Palenque_Demo.wld");
+    if (!FileExists(fnmFirst) && FileExists(fnmDemo)) {
+      return fnmDemo;
+    }
+    return fnmFirst;
   }
 
   void UpdateLevelStats(void)
@@ -6064,7 +6081,7 @@ procedures:
     _SwcWorldChange.plLink = GetPlacement();
     _SwcWorldChange.iType = (INDEX)WLT_FIXED;
     CPrintF("The First Encounter's end: The Second Encounter follows\n");
-    _pNetwork->ChangeLevel(CTFILENAME("Levels\\LevelsMP\\1_0_InTheLastEpisode.wld"), FALSE, 0);
+    _pNetwork->ChangeLevel(SecondEncounterFirstLevel(), FALSE, 0);
     return EReturn();
   };
 

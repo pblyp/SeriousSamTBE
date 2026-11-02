@@ -527,6 +527,17 @@ static void DetectDemoData(void)
     sam_strFirstLevel = "Levels\\KarnakDemo.wld";
     CPrintF(TRANS("Demo data detected.\n"));
   }
+#else
+  // The Both Encounters with the two games' demos: The First Encounter's demo level (Karnak),
+  // then The Second Encounter's (Palenque, see CPlayer::FirstEncounterEnd())
+  if (!_bDemoData) {
+    _bDemoData = FileExists(CTFILENAME("Levels\\LevelsMP\\Demo\\Palenque_Demo.wld"))
+             && !FileExists(CTFILENAME("Levels\\LevelsMP\\1_1_Palenque.wld"));
+  }
+  if (_bDemoData) {
+    sam_strFirstLevel = "Levels\\KarnakDemo.wld";
+    CPrintF(TRANS("Demo data detected.\n"));
+  }
 #endif
 }
 
@@ -535,7 +546,8 @@ static void DetectDemoData(void)
 // them, so say so if they aren't there
 static void CheckFirstEncounterData(void)
 {
-  if (FileExists(CTFILENAME("Levels\\01_Hatshepsut.wld"))) {
+  // (or its demo's)
+  if (IsFileFromCDPath(CTFILENAME("Levels\\01_Hatshepsut.wld")) || IsFileFromCDPath(CTFILENAME("Levels\\KarnakDemo.wld"))) {
     CPrintF(TRANS("The First Encounter's files: %s\n"), (const char *)(CTString&)_fnmCDPath);
     return;
   }

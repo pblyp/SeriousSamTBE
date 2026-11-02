@@ -25,6 +25,7 @@ rendering with WebGL 2, playable in a web browser on computers and phones.
   It runs The Second Encounter's code, which also plays The First Encounter's levels: when
   they end, its credits roll and The Second Encounter's first level follows. Their
   deathmatch maps are there too (e.g. Desert Temple), with The Second Encounter's weapons.
+  Without the games, it plays both games' demos the same way: Karnak, then Palenque.
   The game files are read from the browser's storage as they are needed, so both games fit
   on phones and tablets.
 
@@ -99,7 +100,8 @@ web/build.sh Release all all   # with The Both Encounters, in web/build/dist/tbo
 ```
 
 The first build takes a while. It downloads the official demo and the 1.05 patch from
-archive.org (checked against `web/demo_data.sha256`), builds the entity compiler for the
+archive.org (checked against `web/demo_data.sha256`; with The Both Encounters, also The
+Second Encounter's demo, checked against `web/tse_demo_data.sha256`), builds the entity compiler for the
 build machine, and builds the engine twice. Browsers with JavaScript Promise Integration
 get one build, the others an Asyncify build.
 

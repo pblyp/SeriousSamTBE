@@ -67,6 +67,13 @@
     for (const id of ['play-demo', 'play-demo-note', 'about-demo']) document.getElementById(id).hidden = true;
     ownFilesLabel.classList.replace('secondary', 'primary');
   }
+  // (several demos, played one after the other)
+  if (Game.demos) {
+    playDemoButton.textContent = 'Play the demos';
+    document.getElementById('play-demo-note').textContent = Game.demosNote;
+    document.querySelector('#about-demo summary').textContent = 'About the demos';
+    document.querySelector('#about-demo p').innerHTML = Game.demosAbout;
+  }
   if (multipleInstalls) {
     const names = Game.installs.map(({ name }) => `<em>${name}</em>`).join(' and ');
     ownFilesNote.innerHTML = `Zip the folders where ${names} are installed and pick both .zip files `
@@ -261,15 +268,18 @@
       + 'again, and your .zip picked again, the next time). Your settings and saved games are kept.');
     if (!ok) return false;
     // close what this page has open, so the databases can go
-    try {
-      if (DemoDownload.client) DemoDownload.client.destroy();
-    } catch (e) {
-      // gone already
+    for (const client of DemoDownload.clients) {
+      try {
+        client.destroy();
+      } catch (e) {
+        // gone already
+      }
     }
     const names = ['EM_PRELOAD_CACHE', OWN_FILES_DB];
+    const demoPrefixes = Game.demos ? Game.demos.map(({ prefix }) => prefix) : ['sam-demo-'];
     if (indexedDB.databases) {
       for (const { name } of await indexedDB.databases()) {
-        if (name && name.startsWith('sam-demo-')) names.push(name);
+        if (name && demoPrefixes.some((prefix) => name.startsWith(prefix))) names.push(name);
       }
     }
     await Promise.all([OwnFiles.remove(), ...names.map(deleteDatabase)]);
@@ -570,6 +580,13 @@
       progress(doneBytes);
       const fullPath = `${file.root || '/data/'}${path}`;
       FS.mkdirTree(fullPath.slice(0, fullPath.lastIndexOf('/')));
+      // a demo's, downloaded: read from its pieces too
+      if (Game.lazyArchives && file.pieces && /\.gro$/i.test(path)) {
+        FS.writeFile(fullPath, new Uint8Array(0));
+        GameArchives.registerTorrentFile(fullPath, file.pieces.db, file.pieces.pieceLength, file.pieces.offset, size);
+        doneBytes += size;
+        continue;
+      }
       // kept in pieces on an earlier visit: only the name is there (for the game to find it)
       if (file.chunked) {
         FS.writeFile(fullPath, new Uint8Array(0));
@@ -896,8 +913,46 @@
     }
   }
 
+  // the demos, one after the other (The Both Encounters': The First Encounter's, from the site's
+  // folder, which its page shares, then The Second Encounter's), and the version's base package
+  function loadDemos() {
+    load(async () => {
+      const list = (name) => (params.get(name) ? params.get(name).split(',').filter((u) => u) : null);
+      dataFiles = [];
+      for (const [i, demo] of Game.demos.entries()) {
+        const files = await DemoDownload.download({
+          base: demo.base,
+          prefix: demo.prefix,
+          p2p: webrtc,
+          trackers: list('trackers'),
+          // (more mirrors: The First Encounter's demo's)
+          mirrors: (demo.prefix === 'sam-demo-' && list('seed')) || [],
+          log,
+          onProgress(fraction, peers) {
+            const from = peers > 0 ? ` (with ${peers} other player${peers > 1 ? 's' : ''})` : '';
+            const done = (i + fraction) / Game.demos.length;
+            setStatus(`Downloading ${demo.name}… ${Math.round(fraction * 100)}%${from}`, done);
+          },
+        }).catch((e) => {
+          if (!navigator.onLine) throw new Error('You are offline: the demos can be downloaded once you are online.');
+          throw e;
+        });
+        for (const file of files) {
+          if (isNeeded(file.path) && !(demo.skip && demo.skip.test(file.path))) {
+            dataFiles.push({ ...file, root: demo.root });
+          }
+        }
+      }
+      await loadScript('base-data.js');
+    });
+  }
+
   // the demo comes from other players and this site (see demo-download.js)
   function loadDemo() {
+    if (Game.demos) {
+      loadDemos();
+      return;
+    }
     load(async () => {
       const list = (name) => (params.get(name) ? params.get(name).split(',').filter((u) => u) : null);
       dataFiles = await DemoDownload.download({

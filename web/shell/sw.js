@@ -19,10 +19,13 @@ const Game = self.GameConfig;
 const CACHE = Game.cache;
 // what the page needs to start, kept from the start: the first visit loads it before this
 // worker takes over (the rest is kept as it is used)
+// (the demos' descriptions: The Both Encounters' first one is the site's, outside its folder)
+const DEMO_FILES = Game.demos ? Game.demos.flatMap(({ base }) => [`${base}demo-torrent.json`, `${base}demo-page.torrent`])
+  : Game.demo ? ['demo-torrent.json', 'demo-page.torrent'] : [];
 const SHELL = [
   './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js', 'archives.js',
   'netplay.js', 'touch.js', 'gamepad.js', 'webtorrent.min.js', 'netplay-signal.js', 'base-data.js',
-  ...(Game.demo ? ['demo-torrent.json', 'demo-page.torrent'] : []), 'manifest.webmanifest',
+  ...DEMO_FILES, 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-256.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
 ];
 // and the engine build this browser uses (as main.js picks it)
@@ -44,7 +47,11 @@ function handled(request) {
   if (request.method !== 'GET' || request.headers.has('range')) return false;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return false;
-  const path = url.pathname.slice(new URL(self.registration.scope).pathname.length);
+  const scope = new URL(self.registration.scope).pathname;
+  if (!url.pathname.startsWith(scope)) {
+    return DEMO_FILES.some((file) => new URL(file, self.registration.scope).pathname === url.pathname);
+  }
+  const path = url.pathname.slice(scope.length);
   // (the other versions' folders have workers of their own; a first visit there comes here)
   if (Game.otherVersions.some((folder) => path.startsWith(folder))) return false;
   return !path.startsWith('demo/') && !path.endsWith('.data') && path !== 'lan-signal.json';

@@ -51,7 +51,7 @@ void PrintOneLine(CDrawPort *pdp, const CTString &strText)
   pixJ+=pixLineHeight;
 }
 
-static void LoadOneFile(const CTFileName &fnm, BOOL bTFE = FALSE)
+static void LoadOneFile(const CTFileName &fnm, BOOL bTFE = FALSE, BOOL bOnlyTFE = FALSE)
 {
   try {
     // open the file (in The First Encounter's levels, its copy, which has the same name)
@@ -60,6 +60,9 @@ static void LoadOneFile(const CTFileName &fnm, BOOL bTFE = FALSE)
       try {
         strm.OpenFromCDPath_t(fnm);
       } catch (const char *) {
+        if (bOnlyTFE) {
+          return;
+        }
         strm.Open_t(fnm);
       }
     } else {
@@ -106,8 +109,17 @@ void Credits_On(INDEX iType)
     LoadOneFile(CTFILENAME("Data\\Intro.txt"), bTFE);
   } else if (iType==2) {
     _fSpeed = 2.0f;
-    LoadOneFile(CTFILENAME("Data\\Credits.txt"), bTFE);
-    LoadOneFile(CTFILENAME("Data\\Credits_End.txt"), bTFE);
+    LoadOneFile(CTFILENAME("Data\\Credits.txt"), bTFE, bTFE);
+    if (_bCreditsOn) {
+      LoadOneFile(CTFILENAME("Data\\Credits_End.txt"), bTFE);
+    // (The First Encounter's demo has only the demo's credits)
+    } else if (bTFE) {
+      LoadOneFile(CTFILENAME("Data\\Credits_Demo.txt"), bTFE, TRUE);
+    }
+    if (!_bCreditsOn) {
+      LoadOneFile(CTFILENAME("Data\\Credits.txt"));
+      LoadOneFile(CTFILENAME("Data\\Credits_End.txt"));
+    }
   } else {
     _fSpeed = 2.0f;
     if (_bDemoData) {

@@ -5,7 +5,8 @@ It runs the official Karnak demo out of the box, and the full game when the
 player picks their own installation folder, zipped (the files never leave their device).
 
 The Both Encounters (`SamTBO`, at `/tbo/`) plays The First Encounter and The Second
-Encounter as one campaign, from the player's installations of both (see below).
+Encounter as one campaign, from the player's installations of both, or the two games'
+demos, Karnak then Palenque (see below).
 
 ## Building
 
@@ -66,6 +67,15 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   Encounter's is used; The First Encounter's levels, textures and music come from `/tfe`.
 - **The First Encounter's levels** are recognized by where they come from, and converted
   when loaded (their keys, weapons given at the start, lighting fixes, map).
+- **The demos.** *Play the demos* downloads The First Encounter's demo (the site's
+  `demo/`, shared with its page: the same torrent, and the same IndexedDB copy) and The
+  Second Encounter's (`tbo/demo/`, its own torrent and `tbo-demo-` databases), one after the
+  other (`demos` in its config.js). `web/fetch_tse_demo.sh` downloads The Second Encounter's
+  demo from archive.org (checked against `web/tse_demo_data.sha256`) and keeps its group
+  files and levels. The demos' group files are read from the downloaded torrent pieces as
+  they are needed, like an installation's. The engine sees the Palenque demo level without
+  The Second Encounter's levels: New Game starts Karnak, and at its end (after the demo's
+  credits) Palenque follows.
 - **Group files read as they are needed.** Both installations are more than some phones let
   a page have in memory, so TBO's page (`lazyArchives` in its config.js) doesn't put the
   `.gro` files in the engine's file system: it streams each one from the .zip into
@@ -74,7 +84,8 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   (`Engine/Base/ArchiveReader.h`); in the web build, `Engine/Base/Emscripten/WebArchive.cpp`
   copies what is in the page's cache of pieces (up to 96 MB, those read last) and otherwise
   waits for the pieces from IndexedDB, yielding to the browser as it does every frame (JSPI or
-  Asyncify). Other files (scripts, loose levels) are in memory as before.
+  Asyncify). Other files (scripts, loose levels) are in memory as before, and so is the music
+  track that is playing, when it is an .mp3 (its decoder reads files itself).
 - **Its own storage**, apart from The First Encounter's page on the same site: game files
   in `tbo-own-files`, settings and saved games in `/tbo-user`, the start page's options
   (`tbo.` prefix), its service worker and cache (`tbo-app`), and its network games
@@ -82,7 +93,8 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
 - **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations;
   `web/test/archive-reader.mjs` reads every file of the demo's group files from IndexedDB
   through the engine's reader (a test program, `SamTBO/Sources/Tests/ArchiveReaderTest.cpp`)
-  with a small cache, in both builds. With real installations,
+  with a small cache, in both builds; `web/test/tbo-demos.mjs` plays the demos (Karnak, give-all,
+  its end, then Palenque). With real installations,
   `TBO_TSE_ZIP=… TBO_TFE_ZIP=… node web/test/tbo-levels.mjs` starts each level of both games
   and reports what the engine says about it, and lists the files both have with different
   contents.

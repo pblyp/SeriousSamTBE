@@ -15,7 +15,9 @@
 
 (() => {
   // where downloaded pieces are kept: one IndexedDB database per version of the demo data
+  // (another demo's, e.g. The Second Encounter's on The Both Encounters' page, under its own prefix)
   const DB_PREFIX = 'sam-demo-';
+  let dbPrefix = DB_PREFIX;
   // how long the download may make no progress before falling back to plain HTTP
   const STALL_MS = 20000;
   // how fast this page shares the demo with other players while the game runs
@@ -41,7 +43,7 @@
     constructor(chunkLength, opts = {}) {
       this.chunkLength = Number(chunkLength);
       this.closed = false;
-      this.name = DB_PREFIX + (opts.torrent ? opts.torrent.infoHash : opts.name);
+      this.name = dbPrefix + (opts.torrent ? opts.torrent.infoHash : opts.name);
       const open = indexedDB.open(this.name, 1);
       open.onupgradeneeded = () => open.result.createObjectStore('chunks');
       this.db = request(open);
@@ -99,10 +101,10 @@
   }
 
   // other versions of the demo data are not needed any more
-  async function deleteOtherVersions(infoHash) {
+  async function deleteOtherVersions(prefix, infoHash) {
     if (!indexedDB.databases) return;
     for (const { name } of await indexedDB.databases()) {
-      if (name.startsWith(DB_PREFIX) && name !== DB_PREFIX + infoHash) {
+      if (name.startsWith(prefix) && name !== prefix + infoHash) {
         indexedDB.deleteDatabase(name);
       }
     }
@@ -138,15 +140,15 @@
   // where a web seed's files are (a folder with demo/... in it), ending in a slash
   const seedUrl = (url) => new URL('.', new URL(url.replace(/\/?$/, '/'), location.href)).href;
 
-  async function downloadWithWebTorrent(info, { p2p, trackers, mirrors, onProgress, log }) {
+  async function downloadWithWebTorrent(info, { base, prefix, p2p, trackers, mirrors, onProgress, log }) {
     // (WebTorrent checks pieces with crypto.subtle, which browsers only have on https and localhost)
     if (!window.crypto.subtle) {
       throw new Error('it needs this page on https');
     }
     const WebTorrent = await importWebTorrent();
-    const torrentFile = new Uint8Array(await (await fetchOk('demo-page.torrent')).arrayBuffer());
+    const torrentFile = new Uint8Array(await (await fetchOk(`${base}demo-page.torrent`)).arrayBuffer());
     const client = new WebTorrent({ tracker: p2p ? {} : false, dht: false, lsd: false, utPex: p2p });
-    const seed = seedUrl('.');
+    const seed = seedUrl(base || '.');
 
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -160,6 +162,8 @@
       };
       client.on('error', fail);
 
+      // (the store takes its database's name when it is made, now)
+      dbPrefix = prefix;
       const torrent = client.add(torrentFile, { announce: p2p ? trackers : [], store: IdbChunkStore });
       torrent.on('error', fail);
       torrent.on('warning', (err) => log(`WebTorrent: ${err.message || err}`));
@@ -240,11 +244,14 @@
         // (without WebRTC there is no one to share them with)
         if (p2p) client.throttleUpload(UPLOAD_LIMIT);
         DemoDownload.client = client;
-        deleteOtherVersions(torrent.infoHash).catch(() => {});
+        DemoDownload.clients.push(client);
+        deleteOtherVersions(prefix, torrent.infoHash).catch(() => {});
         resolve(torrent.files.map((file) => ({
           path: stripRoot(file.path),
           size: file.length,
           read: () => file.arrayBuffer(),
+          // (where its bytes are among the pieces kept in IndexedDB, to read them from there)
+          pieces: { db: prefix + torrent.infoHash, pieceLength: torrent.pieceLength, offset: file.offset },
         })));
       });
     });
@@ -263,9 +270,9 @@
     throw error;
   }
 
-  async function downloadWithHttp(info, { mirrors, onProgress }) {
+  async function downloadWithHttp(info, { base, mirrors, onProgress }) {
     const total = info.files.reduce((sum, file) => sum + file.length, 0);
-    const bases = [...mirrors, seedUrl('.')];
+    const bases = [...mirrors, seedUrl(base || '.')];
     let done = 0;
     const files = [];
     for (const file of info.files) {
@@ -286,25 +293,29 @@
   }
 
   // the demo's files as [{ path, size, read() -> Promise<ArrayBuffer> }]
+  //   base:       the folder with the demo (demo-torrent.json, demo-page.torrent, demo/), relative
+  //               to the page ('' for its own folder)
+  //   prefix:     the start of its IndexedDB databases' names (one demo's own)
   //   p2p:        also get them from (and share them with) other players
   //   trackers:   trackers to find other players with (default: the ones the build lists)
   //   mirrors:    more web sites with the files, besides the ones the build lists
   //   onProgress: called with (fraction done, number of other players connected, seconds
   //               left before the site is asked too, or null once it is)
-  async function download({ p2p = true, trackers = null, mirrors = [], onProgress = () => {}, log = () => {} } = {}) {
-    const info = await (await fetchOk('demo-torrent.json')).json();
-    const site = seedUrl('.');
+  async function download({ base = '', prefix = DB_PREFIX, p2p = true, trackers = null, mirrors = [],
+    onProgress = () => {}, log = () => {} } = {}) {
+    const info = await (await fetchOk(`${base}demo-torrent.json`)).json();
+    const site = seedUrl(base || '.');
     mirrors = [...new Set([...(info.webSeeds || []), ...mirrors].map(seedUrl))].filter((url) => url !== site);
     if (navigator.storage && navigator.storage.persist) {
       navigator.storage.persist().catch(() => {});
     }
     try {
-      return await downloadWithWebTorrent(info, { p2p, trackers: trackers || info.trackers, mirrors, onProgress, log });
+      return await downloadWithWebTorrent(info, { base, prefix, p2p, trackers: trackers || info.trackers, mirrors, onProgress, log });
     } catch (e) {
       log(`Downloading with WebTorrent failed (${e.message || e}), downloading the files directly`);
-      return downloadWithHttp(info, { mirrors, onProgress });
+      return downloadWithHttp(info, { base, mirrors, onProgress });
     }
   }
 
-  window.DemoDownload = { download, client: null };
+  window.DemoDownload = { download, client: null, clients: [] };
 })();

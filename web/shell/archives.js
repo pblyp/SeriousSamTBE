@@ -6,9 +6,10 @@
 // installations are more than some phones let a page have.
 //
 // An archive's pieces (CHUNK_SIZE bytes; ArrayBuffers, as WebKit doesn't store Blobs in some
-// contexts) are in the 'chunks' store of the game files' database, keyed [name, index]. The
-// pieces read last stay in memory (up to CACHE_BYTES); the engine asks for the others, and
-// waits for them. Nothing here rejects: the engine gets -1 for what can't be read.
+// contexts) are in the 'chunks' store of the game files' database, keyed [name, index]. A
+// downloaded demo's are in its torrent's pieces (demo-download.js), keyed by index. The pieces
+// read last stay in memory (up to CACHE_BYTES); the engine asks for the others, and waits for
+// them. Nothing here rejects: the engine gets -1 for what can't be read.
 
 (() => {
   const CHUNK_SIZE = 1 << 20;
@@ -60,7 +61,8 @@
     return { size, tail };
   }
 
-  // the archives the engine reads from storage: { path (in its file system), dbName, name, size }
+  // the archives the engine reads from storage: { path (in its file system), dbName, size,
+  // pieceLength, offset (where it starts among the pieces), key(index) }
   const archives = [];
   const databases = new Map();  // dbName -> Promise<IDBDatabase>
   const cache = new Map();      // `${id}/${index}` -> Uint8Array, least recently used first
@@ -87,7 +89,11 @@
 
   // an archive whose pieces are in the database dbName under name
   function register(path, dbName, name, size) {
-    archives.push({ path, dbName, name, size });
+    archives.push({ path, dbName, size, pieceLength: CHUNK_SIZE, offset: 0, key: (index) => [name, index] });
+  }
+  // an archive that is a downloaded torrent's file, at offset among its pieces
+  function registerTorrentFile(path, dbName, pieceLength, offset, size) {
+    archives.push({ path, dbName, size, pieceLength, offset, key: (index) => index });
   }
   function unregister(path) {
     const id = archives.findIndex((a) => a && a.path === path);
@@ -131,8 +137,11 @@
     const archive = archives[id];
     length = Math.min(length, archive.size - offset);
     if (length <= 0) return 0;
-    const first = Math.floor(offset / CHUNK_SIZE);
-    const last = Math.floor((offset + length - 1) / CHUNK_SIZE);
+    const size = archive.pieceLength;
+    // (where it is among the pieces)
+    const at = archive.offset + offset;
+    const first = Math.floor(at / size);
+    const last = Math.floor((at + length - 1) / size);
     const pieces = [];
     for (let i = first; i <= last; i++) {
       const piece = take(id, i);
@@ -142,8 +151,8 @@
     let done = 0;
     for (let i = first; i <= last; i++) {
       const piece = pieces[i - first];
-      const start = i === first ? offset - first * CHUNK_SIZE : 0;
-      const end = Math.min(piece.length, offset + length - i * CHUNK_SIZE);
+      const start = i === first ? at - first * size : 0;
+      const end = Math.min(piece.length, at + length - i * size);
       heap.set(piece.subarray(start, end), ptr + done);
       done += end - start;
     }
@@ -155,11 +164,15 @@
   async function fetch(id, offset, length) {
     try {
       const archive = archives[id];
-      const first = Math.floor(offset / CHUNK_SIZE);
-      const last = Math.floor((offset + Math.max(length, 1) - 1) / CHUNK_SIZE);
-      const lastPiece = Math.floor((archive.size - 1) / CHUNK_SIZE);
+      const size = archive.pieceLength;
+      const at = archive.offset + offset;
+      const first = Math.floor(at / size);
+      const last = Math.floor((at + Math.max(length, 1) - 1) / size);
+      // (the read ahead as many bytes as with own files' pieces)
+      const ahead = Math.ceil(READ_AHEAD * CHUNK_SIZE / size);
+      const lastPiece = Math.floor((archive.offset + archive.size - 1) / size);
       const wanted = [];
-      for (let i = first; i <= Math.min(last + READ_AHEAD, lastPiece); i++) {
+      for (let i = first; i <= Math.min(last + ahead, lastPiece); i++) {
         if (!cache.has(keyOf(id, i))) wanted.push(i);
       }
       if (wanted.length > 0) {
@@ -170,8 +183,11 @@
           const chunks = tx.objectStore('chunks');
           const got = new Map();
           for (const i of wanted) {
-            const request = chunks.get([archive.name, i]);
-            request.onsuccess = () => { if (request.result) got.set(i, new Uint8Array(request.result)); };
+            const request = chunks.get(archive.key(i));
+            request.onsuccess = () => {
+              const data = request.result;
+              if (data) got.set(i, data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+            };
           }
           tx.oncomplete = () => resolve(got);
           tx.onerror = tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction failed'));
@@ -215,6 +231,6 @@
     };
   }
 
-  window.GameArchives = { CHUNK_SIZE, store, register, unregister, open, size, readSync, fetch, stats, asBlob,
+  window.GameArchives = { CHUNK_SIZE, store, register, registerTorrentFile, unregister, open, size, readSync, fetch, stats, asBlob,
     cachedBytes: () => cacheBytes, setCacheLimit: (bytes) => { cacheLimit = Math.max(bytes, 16 << 20); } };
 })();
