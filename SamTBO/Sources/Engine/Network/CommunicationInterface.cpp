@@ -32,7 +32,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <Engine/GameAgent/GameAgent.h>
 
 #ifdef PLATFORM_EMSCRIPTEN
-// in the browser, packets travel over WebRTC instead of a UDP socket
+// in the browser, packets travel through the page's server instead of a UDP socket
 #include <Engine/Base/Emscripten/WebNet.h>
 #endif
 
@@ -382,7 +382,7 @@ void CCommunicationInterface::PrepareForUse(BOOL bUseNetwork, BOOL bClient)
 #ifdef PLATFORM_EMSCRIPTEN
     // (no addresses of its own in the browser)
     cm_strName = "browser";
-    cm_strAddress = "WebRTC";
+    cm_strAddress = "web";
 #else
     // if no valid desired local address
     CPrintF(TRANSV("  getting local addresses\n"));

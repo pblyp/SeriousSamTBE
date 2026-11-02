@@ -1,16 +1,14 @@
 #!/bin/bash
 # Prepares the game data for the page:
-#   demo/, demo*.torrent, demo-torrent.json
-#                        the demo (see fetch_demo_data.sh), downloaded with WebTorrent
-#                        (from other players, and from these files as web seed)
+#   demo/, demo-files.json
+#                        the demo (see fetch_demo_data.sh), which the page downloads (from
+#                        mirrors, and else from these files) and keeps in IndexedDB
 #   base-data.{data,js}  this repository's game files (SE1_10b.gro, scripts, ...) packaged
 #                        with Emscripten's file_packager, used under game files that the
 #                        player provides
 #
-#   package_demo.sh [dist dir] [site url]
+#   package_demo.sh [dist dir]
 #
-# The site URL (e.g. https://user.github.io/SeriousSamClassic/) is written into
-# demo.torrent as web seed for BitTorrent clients; the page doesn't need it.
 # DEMO_MIRRORS (comma separated URLs, see README.md) lists other sites with a copy of demo/.
 set -euo pipefail
 
@@ -18,7 +16,6 @@ WEB_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$WEB_DIR")"
 DEMO_DIR="$WEB_DIR/build/demo-data"
 OUT_DIR="${1:-$WEB_DIR/build/dist}"
-SITE_URL="${2:-}"
 
 if [ ! -d "$DEMO_DIR" ]; then
   echo "Run fetch_demo_data.sh first" >&2
@@ -39,15 +36,10 @@ cd "$OUT_DIR"
 # without what the browser version doesn't use: the recorded demos and the intro
 # flyover that played behind the menu (it starts in the menu); Demos/Default.ini stays,
 # for demos that players record themselves. Also without empty files (placeholders the
-# game doesn't need): GitHub Pages answers a request for part of an empty file with an
-# error (416), which the torrent's web seed does when it falls inside a piece, and the
-# download never finished
+# game doesn't need)
 rm -f demo-data.data demo-data.js
 rsync -a --delete --delete-excluded --min-size=1 --exclude '.DS_Store' \
   --exclude '/Demos/[Aa]uto-[Dd]emo*' --exclude '/Levels/Intro.wld' \
   "$DEMO_DIR/" "$OUT_DIR/demo/"
-if [ "$WEB_DIR/tools/package-lock.json" -nt "$WEB_DIR/tools/node_modules/.package-lock.json" ]; then
-  (cd "$WEB_DIR/tools" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null)
-fi
-node "$WEB_DIR/tools/make_torrent.mjs" "$OUT_DIR" "$SITE_URL"
+node "$WEB_DIR/tools/make_demo_list.mjs" "$OUT_DIR"
 ls -la "$OUT_DIR"/base-data.* "$OUT_DIR"/demo*

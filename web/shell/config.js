@@ -26,8 +26,6 @@ self.GameConfig = {
   cache: 'sam-app',
   // the other versions, in folders of this site (not this page's to cache)
   otherVersions: ['tbo/'],
-  // network games: Trystero's app id, and the prefix of room names (so the players of the
-  // versions don't meet)
-  netAppId: 'serioussam-tfe-web',
+  // network games: the prefix of room names (so the players of the versions don't meet)
   netRoomPrefix: '',
 };

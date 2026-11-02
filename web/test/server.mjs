@@ -1,10 +1,8 @@
 // Minimal static file server for web/build/dist.
 //
-// It also helps network games, for players who open the page from it (announced in
-// /lan-signal.json), so that games on a local network need no internet:
-//   /signal  relays WebRTC signaling (a Trystero WebSocket relay): players find each other
-//   /hub     passes the game's packets on, for players whose browsers can't connect to
-//            each other with WebRTC (the page's "No WebRTC", and as a fallback)
+// It also runs network games, for players who open the page from it (announced in
+// /net-hub.json):
+//   /hub     passes the game's packets on between the players of a room (see shell/netplay.js)
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -12,11 +10,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../build/dist');
-const SIGNAL_PATH = '/signal';
 const HUB_PATH = '/hub';
 
-// (only if they are installed: npm install in web/test)
-const relayModule = await import('@trystero-p2p/ws-relay/server').catch(() => null);
+// (only if it is installed: npm install in web/test)
 const wsModule = await import('ws').catch(() => null);
 
 // the hub: in each room (a socket's first message: { room }), every message goes to
@@ -65,7 +61,6 @@ const TYPES = {
   '.data': 'application/octet-stream',
   '.png': 'image/png',
   '.json': 'application/json',
-  '.torrent': 'application/x-bittorrent',
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -84,9 +79,9 @@ export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false 
       res.writeHead(204, corsHeaders).end();
       return;
     }
-    if (urlPath === '/lan-signal.json' && (relay || hub)) {
+    if (urlPath === '/net-hub.json' && hub) {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' })
-        .end(JSON.stringify({ ...(relay ? { path: SIGNAL_PATH } : {}), ...(hub ? { hub: HUB_PATH } : {}) }));
+        .end(JSON.stringify({ hub: HUB_PATH }));
       return;
     }
     // (a folder's page is its index.html, as on GitHub Pages: e.g. tbo/)
@@ -113,8 +108,8 @@ export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false 
         'Cache-Control': 'no-cache',
         'Accept-Ranges': 'bytes',
       };
-      // parts of files, as WebTorrent asks its web seed for (like GitHub Pages does,
-      // which refuses ranges of empty files)
+      // parts of files, as the page asks for to go on with a download that stopped (like
+      // GitHub Pages does, which refuses ranges of empty files)
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
       if (req.headers.range && st.size === 0) {
         res.writeHead(416, { 'Content-Range': 'bytes */0' }).end();
@@ -138,13 +133,10 @@ export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false 
       fs.createReadStream(file).pipe(res);
     });
   });
-  // (both on this server: each upgrade goes to the one for its path)
-  // (port: undefined, or the relay sets a default port next to noServer, which ws refuses)
-  const relay = relayModule ? relayModule.createWsRelayServer({ noServer: true, port: undefined }) : null;
   const hub = wsModule ? createHub() : null;
   server.on('upgrade', (req, socket, head) => {
     const upgradePath = new URL(req.url, 'http://x').pathname;
-    const wss = upgradePath === SIGNAL_PATH && relay ? relay.wss : upgradePath === HUB_PATH && hub ? hub : null;
+    const wss = upgradePath === HUB_PATH && hub ? hub : null;
     if (!wss) {
       socket.destroy();
       return;
@@ -158,7 +150,6 @@ export function serve(port = 0, root = DIST, host = '127.0.0.1', { cors = false 
         url: `http://127.0.0.1:${actual}`,
         served,
         close: () => {
-          if (relay) relay.close();
           if (hub) {
             for (const socket of hub.clients) socket.terminate();
             hub.close();
@@ -176,8 +167,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const host = process.argv[3] || '127.0.0.1';
   const { url } = await serve(port, DIST, host);
   console.log(`Serving ${DIST} at ${url}${host === '0.0.0.0' ? ' (and on all network interfaces)' : ''}`);
-  console.log(relayModule ? `Network games find each other through this server (${SIGNAL_PATH})`
-    : 'No signaling relay (npm install in web/test): network games use the public trackers');
-  console.log(wsModule ? `Network games can play through this server (${HUB_PATH}), also without WebRTC`
-    : 'No packet hub (npm install in web/test): network games need WebRTC');
+  console.log(wsModule ? `Network games play through this server (${HUB_PATH})`
+    : 'No packet hub (npm install in web/test): no network games');
 }

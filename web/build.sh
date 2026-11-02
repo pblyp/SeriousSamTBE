@@ -39,11 +39,6 @@ cmake -S "$SRC_DIR" -B "$NATIVE_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DTFE=T
 cmake --build "$NATIVE_DIR" --target ecc
 ECC="$NATIVE_DIR/ecc"
 
-# the page's libraries (WebTorrent, Trystero)
-if [ "$WEB_DIR/tools/package-lock.json" -nt "$WEB_DIR/tools/node_modules/.package-lock.json" ]; then
-  (cd "$WEB_DIR/tools" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null)
-fi
-
 # 2. the engine, once per way of yielding to the browser
 #    (tfe: SamTFE into dist; tbo: SamTBO into dist/tbo, its page with its own config.js)
 for game in $GAMES; do
@@ -66,7 +61,9 @@ for game in $GAMES; do
   if [ "$game" = "tbo" ]; then
     cp -R "$WEB_DIR/shell-tbo/"* "$dist/"
   fi
-  node "$WEB_DIR/tools/build_libs.mjs" "$dist"
+  # (what earlier builds put there for WebTorrent and WebRTC)
+  rm -f "$dist"/demo.torrent "$dist"/demo-page.torrent "$dist"/demo-torrent.json "$dist"/webtorrent.min.js \
+    "$dist"/netplay-signal.js
 done
 
 # 3. the game data: TBO's base package (its players provide all the rest), and The Second
@@ -79,24 +76,22 @@ if [[ " $GAMES " == *" tbo "* ]]; then
   fi
   # (without empty files, see package_demo.sh)
   rsync -a --delete --delete-excluded --min-size=1 --exclude '.DS_Store' "$BUILD_DIR/tse-demo-data/" "$DIST_DIR/tbo/demo/"
-  DEMO_MIRRORS= node "$WEB_DIR/tools/make_torrent.mjs" "$DIST_DIR/tbo" "${SITE_URL:+${SITE_URL}tbo/}" \
-    'Serious Sam: The Second Encounter demo, for the web version' >/dev/null
+  DEMO_MIRRORS= node "$WEB_DIR/tools/make_demo_list.mjs" "$DIST_DIR/tbo" >/dev/null
 fi
 
-# and TFE's base package and demo (SITE_URL: where the site will be, for demo.torrent's web
-# seed; DEMO_MIRRORS: other sites with a copy of demo/, see README.md)
+# and TFE's base package and demo (DEMO_MIRRORS: other sites with a copy of demo/, see README.md)
 if [[ " $GAMES " != *" tfe "* ]]; then
   echo "Built into $DIST_DIR"
   exit 0
 fi
-if [ ! -f "$DIST_DIR/demo-page.torrent" ] || [ ! -f "$DIST_DIR/base-data.data" ]; then
+if [ ! -f "$DIST_DIR/demo-files.json" ] || [ ! -f "$DIST_DIR/base-data.data" ]; then
   if [ ! -d "$BUILD_DIR/demo-data" ]; then
     "$WEB_DIR/fetch_demo_data.sh"
   fi
-  "$WEB_DIR/package_demo.sh" "$DIST_DIR" "${SITE_URL:-}"
+  "$WEB_DIR/package_demo.sh" "$DIST_DIR"
 else
-  # (the demo is packaged already: the torrent again, in case the mirrors changed)
-  node "$WEB_DIR/tools/make_torrent.mjs" "$DIST_DIR" "${SITE_URL:-}" >/dev/null
+  # (the demo is packaged already: its list again, in case the mirrors changed)
+  node "$WEB_DIR/tools/make_demo_list.mjs" "$DIST_DIR" >/dev/null
 fi
 
 echo "Built into $DIST_DIR"

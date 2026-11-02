@@ -2,26 +2,18 @@
 
 // Network games between browsers. The engine keeps its own architecture: the player
 // who starts a network game runs the server, the others connect to it as clients,
-// and the engine's UDP packets (with its own acks and resends) travel over WebRTC
-// data channels set up like UDP: unordered, never resent.
+// and the engine's UDP packets (with its own acks and resends) travel through the page
+// server's packet hub (a WebSocket that passes them on to the room's other players:
+// web/test/server.mjs has one, the site on GitHub Pages doesn't).
 //
 // Players meet in a "room" named by a short code, which the host gets and shares
-// (or a link with it). Signaling, which WebRTC needs to set up the connections, goes
-// through the page's server if it relays it (web/test/server.mjs does), else through
-// public BitTorrent WebSocket trackers and Nostr relays at the same time (with
-// Trystero, bundled in netplay-signal.js).
-//
-// If the page's server has a packet hub (server.mjs does), players also connect through
-// it: games then work when browsers can't connect to each other with WebRTC (some
-// networks, sandboxed browsers), or without WebRTC at all (the page without ?webrtc=true).
-// WebRTC links are preferred when they work.
+// (or a link with it).
 //
 // The engine sees the other players as made up IPv4 addresses (Engine/Base/Emscripten/
 // WebNet.cpp calls open(), join(), send(), receive() and close()).
 
 (() => {
   // (each version of the game its own, see config.js: their players don't meet)
-  const APP_ID = self.GameConfig ? GameConfig.netAppId : 'serioussam-tfe-web';
   const roomName = (code) => (self.GameConfig ? GameConfig.netRoomPrefix : '') + code;
   // room codes: no 0/O or 1/I, which are easily mixed up
   const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -30,18 +22,15 @@
   const HOST_IP = ip(10, 83, 0, 1);
   const FIRST_CLIENT_IP = ip(10, 83, 0, 2);
   const PORT = 25600;
-  // how long joining waits for the host (finding each other through public signaling and
-  // trying the ways to connect can take half a minute)
-  const JOIN_TIMEOUT_MS = 90000;
-  // a congested channel drops packets, like a full UDP buffer (the engine resends)
+  // how long joining waits for the host
+  const JOIN_TIMEOUT_MS = 20000;
+  // a congested connection drops packets, like a full UDP buffer (the engine resends)
   const MAX_BUFFERED = 256 * 1024;
-  // the game's channel next to Trystero's own on each connection, agreed on both sides
-  // (an id far from the ones channels get automatically)
-  const CHANNEL = { negotiated: true, id: 501, ordered: false, maxRetransmits: 0 };
-  // how long a player whose connections all closed may take to come back on a new one
-  // before they count as gone (signaling sometimes replaces connections)
+  // how long a player whose connection closed may take to come back on a new one before they
+  // count as gone
   const LINK_GRACE_MS = 10000;
-  const NO_HUB = 'This site can\'t relay network games without WebRTC: open the page with ?webrtc=true.';
+  const NO_HUB = 'This site can\'t pass network games on: open the game from a server that does '
+    + '(see the web version\'s README).';
   const randomId = () => Math.random().toString(36).slice(2);
 
   function ip(a, b, c, d) {
@@ -61,94 +50,18 @@
 
   const showCode = (code) => `${code.slice(0, 3)}-${code.slice(3)}`;
 
-  // ------------------------------------------------------------------ diagnostics
-
-  // an RTCPeerConnection that logs how it tries to connect (?netdebug): the addresses each
-  // side offers ("host" ones are on the local network, hidden behind random .local names
-  // that the other side resolves with multicast DNS; "srflx" ones are the public address,
-  // found with STUN; "relay" ones go through a TURN server), and how the checks went
-  function debugPeerConnection(log) {
-    const Base = window.RTCPeerConnection;
-    let count = 0;
-    const describe = (line) => {
-      // "candidate:1 1 UDP 2122252543 1f2e....local 51480 typ host ..."
-      const p = String(line).replace(/^a=/, '').split(' ');
-      return `${p[7] || '?'} ${p[4]}:${p[5]} ${(p[2] || '').toLowerCase()}`;
-    };
-    return class extends Base {
-      constructor(...args) {
-        super(...args);
-        const id = ++count;
-        this.debugId = id;
-        log(`WebRTC #${id}: new connection (ICE servers: ${JSON.stringify((args[0] && args[0].iceServers || []).map((s) => s.urls))})`);
-        this.addEventListener('icecandidate', (e) => {
-          if (e.candidate && e.candidate.candidate) log(`WebRTC #${id}: this side offers ${describe(e.candidate.candidate)}`);
-        });
-        this.addEventListener('icegatheringstatechange', () => log(`WebRTC #${id}: gathering ${this.iceGatheringState}`));
-        this.addEventListener('iceconnectionstatechange', () => {
-          log(`WebRTC #${id}: ${this.iceConnectionState}`);
-          if (this.iceConnectionState === 'failed') this.logChecks();
-        });
-      }
-
-      async setLocalDescription(description) {
-        const result = await super.setLocalDescription(description);
-        for (const line of (this.localDescription && this.localDescription.sdp || '').match(/a=candidate:.*/g) || []) {
-          log(`WebRTC #${this.debugId}: this side offers ${describe(line)} (in its ${this.localDescription.type})`);
-        }
-        return result;
-      }
-
-      async setRemoteDescription(description) {
-        for (const line of (description && description.sdp || '').match(/a=candidate:.*/g) || []) {
-          log(`WebRTC #${this.debugId}: the other side offers ${describe(line)} (in its ${description.type})`);
-        }
-        return super.setRemoteDescription(description);
-      }
-
-      async addIceCandidate(candidate) {
-        if (candidate && candidate.candidate) log(`WebRTC #${this.debugId}: the other side offers ${describe(candidate.candidate)}`);
-        return super.addIceCandidate(candidate);
-      }
-
-      // which address pairs were tried, and what came of them
-      async logChecks() {
-        try {
-          const stats = await this.getStats();
-          const candidates = {};
-          stats.forEach((s) => {
-            if (s.type === 'local-candidate' || s.type === 'remote-candidate') {
-              candidates[s.id] = `${s.candidateType} ${s.address || s.ip}:${s.port}`;
-            }
-          });
-          stats.forEach((s) => {
-            if (s.type === 'candidate-pair') {
-              log(`WebRTC #${this.debugId}: tried ${candidates[s.localCandidateId]} -> ${candidates[s.remoteCandidateId]}: `
-                + `${s.state}, ${s.requestsSent || 0} checks sent, ${s.responsesReceived || 0} answered`);
-            }
-          });
-        } catch (e) {
-          log(`WebRTC #${this.debugId}: no statistics (${e.message})`);
-        }
-      }
-    };
-  }
-
   // ------------------------------------------------------------------ transports
 
   // A transport joins a room and reports connections to other players ("links") as
   // they open and close, each with a channel to send bytes on; and messages saying who
-  // is the host. A player may have more than one link (one per signaling network, and
-  // one through the page's server), and a link may be replaced by a new one under the
-  // same name. Links through the server are named "hub:...".
+  // is the host. A link may be replaced by a new one under the same name.
   //   on('link', (link, peerId, { channel, sendRole }) => ...)
   //   on('unlink', (link, peerId, { left }) => ...)    (left: the player said goodbye)
   //   on('role', (peerId, role) => ...)
   //   leave()
   //   selfId: this player's id (the same in all transports of a game)
 
-  // a transport's events, kept until something listens (players may connect through one
-  // transport while another is still being set up)
+  // a transport's events, kept until something listens
   function transportEvents() {
     const handlers = {};
     const pending = [];
@@ -164,60 +77,6 @@
           else i++;
         }
       },
-    };
-  }
-
-  // WebRTC, with Trystero over trackers and Nostr relays (and/or self-hosted relays)
-  async function webRtcTransport(code, { trackers, relays, turn, onJoinError, debug, log }) {
-    // signaling encrypts with crypto.subtle, which browsers only have on https and localhost
-    if (!crypto.subtle) {
-      throw new Error('WebRTC needs this page on https (or a server that can pass games on).');
-    }
-    const signal = await import('./netplay-signal.js');
-    // all of a browser's addresses go in its offer or answer (on a local network, the
-    // ones trickled after it in separate messages didn't all arrive)
-    const config = { trickleIce: false };
-    if (turn) config.turnConfig = [turn];
-    if (debug) config.rtcPolyfill = debugPeerConnection(log);
-    const callbacks = { onJoinError };
-    // (public relays come and go: no warnings for every one that fails)
-    const quiet = { warnOnRelayFailure: false };
-    // an app id for each signaling network: Trystero shares a connection between rooms
-    // of the same app and room name, and closes it about two minutes after one of them
-    // lets go of it, while the game still runs on it
-    const rooms = relays && relays.length
-      ? [['relay', signal.joinRelayRoom({ ...config, appId: `${APP_ID}/relay`, relayConfig: { ...quiet, urls: relays } }, code, callbacks)]]
-      : [
-        ['torrent', signal.joinTorrentRoom({ ...config, appId: `${APP_ID}/torrent`,
-          relayConfig: { ...quiet, ...(trackers ? { urls: trackers } : {}) } }, code, callbacks)],
-        ['nostr', signal.joinNostrRoom({ ...config, appId: `${APP_ID}/nostr`, relayConfig: quiet }, code, callbacks)],
-      ];
-    const events = transportEvents();
-    // (the game's channel on each connection, made once: its id can only be used once)
-    const channels = new WeakMap();
-    for (const [network, room] of rooms) {
-      const roleAction = room.makeAction('role');
-      roleAction.onMessage = (role, { peerId }) => events.emit('role', peerId, role);
-      room.onPeerJoin = (peerId) => {
-        const connection = room.getPeers()[peerId];
-        if (!connection) return;
-        let channel = channels.get(connection);
-        if (!channel) {
-          channel = connection.createDataChannel('sam', CHANNEL);
-          channel.binaryType = 'arraybuffer';
-          channels.set(connection, channel);
-        }
-        events.emit('link', `${network}:${peerId}`, peerId, {
-          channel,
-          sendRole: (role) => roleAction.send(role, { target: peerId }).catch(() => {}),
-        });
-      };
-      room.onPeerLeave = (peerId) => events.emit('unlink', `${network}:${peerId}`, peerId, { left: false });
-    }
-    return {
-      on: events.on,
-      leave() { for (const [, room] of rooms) room.leave(); },
-      selfId: signal.selfId,
     };
   }
 
@@ -242,8 +101,8 @@
     }
   }
 
-  // without WebRTC: browsers connected to a WebSocket hub (the page's server), or tabs of
-  // the same browser (?net=local, a BroadcastChannel per room, for tests)
+  // browsers connected to a WebSocket hub (the page's server), or tabs of the same browser
+  // (?net=local, a BroadcastChannel per room, for tests)
   async function localTransport(code, hubUrl, selfId = randomId()) {
     const bus = hubUrl ? await hubBus(hubUrl, code) : new BroadcastChannel(`sam-net-${roomName(code)}`);
     const linkName = (peerId) => `${hubUrl ? 'hub' : 'local'}:${peerId}`;
@@ -265,7 +124,6 @@
       if (m.type === 'hello-back') addPeer(m.from);
       if (m.type === 'role') events.emit('role', m.from, m.data);
       if (m.type === 'data') { const channel = peers.get(m.from); if (channel && channel.onmessage) channel.onmessage({ data: m.data }); }
-      // (a player who has another link, e.g. with WebRTC, stays: see linkGone())
       if (m.type === 'bye') { peers.delete(m.from); events.emit('unlink', linkName(m.from), m.from, { left: true }); }
     };
     setTimeout(() => post(null, 'hello'));
@@ -276,38 +134,21 @@
     };
   }
 
-  // several transports as one (WebRTC and the page server's hub)
-  function combineTransports(parts) {
-    return {
-      on(event, fn) { for (const part of parts) part.on(event, fn); },
-      leave() { for (const part of parts) part.leave(); },
-      selfId: parts[0].selfId,
-    };
-  }
-
   // ------------------------------------------------------------------ netplay
 
-  //   connection(): 'webrtc' (the page with ?webrtc=true) or 'none' (only through the
-  //     page's server)
-  //   services(): -> Promise<{ relays, hub }>: what the page's server offers (signaling
-  //     relays, packet hub URL), if anything
-  //   relays, hub: instead of the page server's (relays: [] for the public ones; hub: false
-  //     for none)
+  //   services(): -> Promise<{ hub }>: what the page's server offers (its packet hub's URL),
+  //     if anything
+  //   hub: instead of the page server's
   //   transport: 'local' for tests (a BroadcastChannel, or the hub), or a function
   //     (code, options) -> Promise<transport>
-  //   trackers: BitTorrent trackers for public signaling
-  //   turn: a TURN server ({ urls, username, credential }) for networks that need one
-  //   debug: log how WebRTC connections are tried (see debugPeerConnection())
   //   linkGraceMs: see LINK_GRACE_MS
   //   log(text), onChange(netplay): to tell the player what is going on
-  function create({ connection = () => 'webrtc', services = async () => ({}), relays = null, hub = null,
-    transport = null, trackers = null, turn = null, debug = false, linkGraceMs = LINK_GRACE_MS,
+  function create({ services = async () => ({}), hub = null, transport = null, linkGraceMs = LINK_GRACE_MS,
     log = () => {}, onChange = () => {} } = {}) {
     let room = null;
     let roomStarting = null;
     let isHost = false;
     let nextClientIp = FIRST_CLIENT_IP;
-    let lastJoinError = '';
     // the other players: peerId -> { peerId, ip, isHost, links: Map(link -> { channel, sendRole }), graceTimer }
     const peers = new Map();
     const byIp = new Map();     // ip -> player
@@ -323,7 +164,7 @@
       error: '',
       players: 0,      // other players connected
       joinStarted: 0,  // when joining started (Date.now())
-      via: '',         // how a joined player reaches the host: 'with WebRTC', 'through this page's server'
+      via: '',         // how a joined player reaches the host: 'through this page's server'
 
       // the engine opens its "socket": the server starts a room, a client waits for join()
       open(server) {
@@ -360,7 +201,6 @@
         this.state = 'joining';
         this.error = '';
         this.joinStarted = Date.now();
-        lastJoinError = '';
         onChange(this);
         log(`Looking for the game in room ${showCode(code)}`);
         try {
@@ -381,11 +221,7 @@
                 resolve();
               } else if (Date.now() - started > JOIN_TIMEOUT_MS) {
                 clearInterval(check);
-                reject(new Error(lastJoinError
-                  ? `The game in room ${showCode(code)} was found, but this browser can't connect to it. `
-                    + 'One of the networks probably blocks direct connections (some mobile and company networks do): '
-                    + 'try another network, or a TURN server (see the page\'s turn= option).'
-                  : `No game was found in room ${showCode(code)}. Check the code, and that the game is still running.`));
+                reject(new Error(`No game was found in room ${showCode(code)}. Check the code, and that the game is still running.`));
               }
             }, 100);
           });
@@ -446,19 +282,16 @@
       normalizeCode,
     };
 
-    // a channel that can carry the player's packets now, if any: WebRTC rather than the
-    // page server's hub (it says when that changes)
+    // a channel that can carry the player's packets now, if any (it says when that changes)
     function openChannel(peer) {
       let route = null;
       for (const [link, { channel }] of peer.links) {
-        if (channel.readyState !== 'open') continue;
-        if (!link.startsWith('hub:')) {
+        if (channel.readyState === 'open') {
           route = [link, channel];
           break;
         }
-        route = route || [link, channel];
       }
-      const via = route ? (route[0].startsWith('hub:') ? 'through this page\'s server' : 'with WebRTC') : null;
+      const via = route ? (route[0].startsWith('hub:') ? 'through this page\'s server' : 'in this browser') : null;
       if (via && via !== peer.via) {
         peer.via = via;
         log(`Network game: connected to ${peer.isHost ? 'the host' : 'a player'} ${via}`);
@@ -479,12 +312,8 @@
 
     function startRoom(code) {
       if (!roomStarting) {
-        const options = { trackers, turn, debug, log, onJoinError: (details) => {
-          lastJoinError = details.error || String(details);
-          log(`Network game: ${lastJoinError}`);
-        } };
-        const starting = typeof transport === 'function' ? transport(code, options)
-          : transport === 'local' ? localTransport(code, hub) : openTransports(code, options);
+        const starting = typeof transport === 'function' ? transport(code, { log })
+          : transport === 'local' ? localTransport(code, hub) : hubTransport(code);
         roomStarting = starting.then((r) => {
           room = r;
           r.on('link', onLink);
@@ -506,34 +335,14 @@
       return roomStarting;
     }
 
-    // WebRTC, the page server's hub, or both, as the page is set up and the server allows
-    async function openTransports(code, options) {
+    // through the page server's hub
+    async function hubTransport(code) {
       const found = (await services().catch(() => null)) || {};
-      const relayList = relays !== null ? relays : found.relays || null;
-      const hubUrl = hub === false ? null : hub || found.hub || null;
-      const mode = connection();
-      const parts = [];
-      let webRtcError = null;
-      if (mode !== 'none') {
-        try {
-          parts.push(await webRtcTransport(code, { ...options, relays: relayList && relayList.length ? relayList : null }));
-        } catch (e) {
-          webRtcError = e;
-        }
-      }
-      if (hubUrl) {
-        try {
-          parts.push(await localTransport(code, hubUrl, parts.length ? parts[0].selfId : randomId()));
-          log(webRtcError ? `Network game: without WebRTC (${webRtcError.message}), through this page's server only`
-            : `Network game: also through this page's server (${hubUrl})`);
-        } catch (e) {
-          log(`Network game: ${e.message}`);
-        }
-      }
-      if (!parts.length) {
-        throw webRtcError || new Error(NO_HUB);
-      }
-      return parts.length > 1 ? combineTransports(parts) : parts[0];
+      const hubUrl = hub || found.hub || null;
+      if (!hubUrl) throw new Error(NO_HUB);
+      const part = await localTransport(code, hubUrl);
+      log(`Network game: through this page's server (${hubUrl})`);
+      return part;
     }
 
     function getPeer(peerId) {
@@ -550,8 +359,7 @@
       return peer;
     }
 
-    // a connection to a player opened: the first, another one (through another signaling
-    // network), or one replacing a connection that is going away
+    // a connection to a player opened: the first, or one replacing a connection that is going away
     function onLink(link, peerId, conn) {
       const peer = getPeer(peerId);
       const old = peer.links.get(link);
@@ -579,8 +387,8 @@
       channel.onclose = () => linkGone(peer, link, conn, false);
     }
 
-    // a connection to a player closed: they are gone when no other one is left, and none
-    // comes back soon (or right away if they said goodbye)
+    // a connection to a player closed: they are gone when none comes back soon (or right
+    // away if they said goodbye)
     function linkGone(peer, link, conn, left) {
       if (!conn || peer.links.get(link) !== conn) return;
       peer.links.delete(link);
@@ -619,12 +427,5 @@
     return netplay;
   }
 
-  // "turn:user:password@host:3478" -> an ICE server for RTCPeerConnection
-  function parseTurn(text) {
-    const m = /^(turns?):(?:([^:@]*):([^@]*)@)?(.+)$/.exec(text || '');
-    if (!m) return null;
-    return { urls: `${m[1]}:${m[4]}`, username: m[2] ? decodeURIComponent(m[2]) : undefined, credential: m[3] ? decodeURIComponent(m[3]) : undefined };
-  }
-
-  window.NetPlay = { create, normalizeCode, showCode, parseTurn };
+  window.NetPlay = { create, normalizeCode, showCode };
 })();

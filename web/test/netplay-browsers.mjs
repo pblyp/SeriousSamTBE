@@ -1,14 +1,10 @@
-// Network games over WebRTC between different browsers (Safari's WebKit, Firefox,
-// Chromium): one hosts Karnak, the other joins with the room code, and they keep
-// playing. Signaling goes through a local Trystero relay; connections go through a
-// local TURN server, so this also works where direct WebRTC connections don't (e.g.
-// behind some VPNs).
+// Network games between different browsers (Safari's WebKit, Firefox, Chromium), through
+// the page server's hub: one hosts Karnak, the other joins with the room code, and they keep
+// playing.
 //
-//   node netplay-browsers.mjs [host:client ...] [--public]   (default: a mix of all three)
+//   node netplay-browsers.mjs [host:client ...]   (default: a mix of all three)
 
 import { chromium, firefox, webkit } from 'playwright';
-import { createWsRelayServer } from '@trystero-p2p/ws-relay/server';
-import Turn from 'node-turn';
 import { serve } from './server.mjs';
 
 const BROWSERS = { chromium, firefox, webkit };
@@ -18,29 +14,18 @@ const pairs = pairArgs.length
   : [['webkit', 'firefox'], ['firefox', 'webkit'], ['chromium', 'firefox'], ['webkit', 'webkit']];
 
 const server = await serve();
-const relay = createWsRelayServer({ host: '127.0.0.1', port: 0 });
-await relay.ready;
-const turn = new Turn({ listeningPort: 3478, listeningIps: ['127.0.0.1'], relayIps: ['127.0.0.1'],
-  authMech: 'long-term', credentials: { sam: 'sam' }, debugLevel: 'OFF' });
-turn.start();
-// (--public: the public trackers and Nostr relays instead of the local relay)
-const usePublic = process.argv.includes('--public');
-const query = `webrtc=true&nethub=off${usePublic ? '&signal=public' : `&signal=${encodeURIComponent(`ws://127.0.0.1:${relay.address().port}`)}`}`
-  + `&turn=${encodeURIComponent('turn:sam:sam@127.0.0.1:3478')}`;
 
 const results = {};
 const errors = [];
 const browsers = [];
 
 async function openPlayer(name, type, extra) {
-  // (Firefox leaves out a TURN server on the loopback address unless told otherwise)
-  const options = type === 'firefox' ? { firefoxUserPrefs: { 'media.peerconnection.ice.loopback': true } }
-    : type === 'chromium' ? { args: ['--use-angle=metal', '--autoplay-policy=no-user-gesture-required'] } : {};
+  const options = type === 'chromium' ? { args: ['--use-angle=metal', '--autoplay-policy=no-user-gesture-required'] } : {};
   const browser = await BROWSERS[type].launch(options);
   browsers.push(browser);
   const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
   page.on('pageerror', (e) => errors.push(`${name}: ${e.stack || e.message}`));
-  await page.goto(`${server.url}/index.html?autostart=1&${query}&${extra}`);
+  await page.goto(`${server.url}/index.html?autostart=1&${extra}`);
   return page;
 }
 
@@ -63,8 +48,6 @@ for (const [hostType, clientType] of pairs) {
   for (const browser of browsers.splice(0)) await browser.close();
 }
 
-turn.stop();
-await relay.close();
 server.close();
 
 results['no page errors'] = errors.length === 0;

@@ -1,34 +1,23 @@
 'use strict';
 
-// Downloads the demo's game files.
+// Downloads the demo's game files, from mirrors (other web sites with a copy of demo/...) and
+// else from this site, and keeps them in IndexedDB: the next visit downloads nothing, and a
+// download that stopped goes on from where it was. Each file is kept in 1 MB pieces (keyed
+// [path, index] in the 'chunks' store, as the player's own group files are, see archives.js),
+// so a page that reads group files as they are needed reads them from there.
 //
-// With WebTorrent: from other players who have the page open (with WebRTC only), from
-// mirrors (other web sites with a copy of demo/..., as the torrent's web seeds), and from
-// this site, which serves the same files. The site is only asked when the others can't
-// do it (nothing within PEER_WAIT_MS or MIRROR_WAIT_MS, or too slow), which keeps the
-// site's bandwidth (GitHub Pages: 100 GB a month) for those who need it. The pieces are
-// kept in IndexedDB, so the next visit doesn't download anything, and with WebRTC the
-// page keeps sharing them with other players while the game runs.
+// demo-files.json (web/tools/make_demo_list.mjs) lists the files, the version of the demo data
+// (one IndexedDB database per version: other versions are deleted) and the mirrors.
 //
-// Without WebTorrent (it can't load, or nothing arrives): the files one by one, from a
-// mirror or else this site.
+// Where IndexedDB can't be used, the files are downloaded into memory, each visit.
 
 (() => {
-  // where downloaded pieces are kept: one IndexedDB database per version of the demo data
-  // (another demo's, e.g. The Second Encounter's on The Both Encounters' page, under its own prefix)
+  // the start of the databases' names (another demo's, e.g. The Second Encounter's on The Both
+  // Encounters' page, have their own)
   const DB_PREFIX = 'sam-demo-';
-  let dbPrefix = DB_PREFIX;
-  // how long the download may make no progress before falling back to plain HTTP
-  const STALL_MS = 20000;
-  // how fast this page shares the demo with other players while the game runs
-  const UPLOAD_LIMIT = 1024 * 1024;
-  // how long to look for other players before the site is asked too, and how fast they
-  // must be (and for how long they may be slower) for the site not to be asked
-  const PEER_WAIT_MS = 15000;
-  const PEER_SPEED_ENOUGH = 1024 * 1024;
-  const PEER_SLOW_MS = 5000;
-  // the same without other players, when there are mirrors (they answer right away)
-  const MIRROR_WAIT_MS = 5000;
+  const CHUNK_SIZE = 1 << 20;
+  // how often a source may fail without anything arriving before the next one is asked
+  const TRIES = 2;
 
   function request(req) {
     return new Promise((resolve, reject) => {
@@ -37,285 +26,233 @@
     });
   }
 
-  // torrent pieces in IndexedDB (an abstract-chunk-store, as WebTorrent wants:
-  // WebTorrent's own store needs file system access that Safari lacks)
-  class IdbChunkStore {
-    constructor(chunkLength, opts = {}) {
-      this.chunkLength = Number(chunkLength);
-      this.closed = false;
-      this.name = dbPrefix + (opts.torrent ? opts.torrent.infoHash : opts.name);
-      const open = indexedDB.open(this.name, 1);
-      open.onupgradeneeded = () => open.result.createObjectStore('chunks');
-      this.db = request(open);
-    }
+  function openDatabase(name) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open(name, 1);
+      open.onupgradeneeded = () => {
+        open.result.createObjectStore('chunks');
+        // path -> how many of its bytes are kept (whole pieces, until all of it is)
+        open.result.createObjectStore('files');
+      };
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error || new Error('Cannot open IndexedDB'));
+      open.onblocked = () => reject(new Error('IndexedDB is blocked'));
+    });
+  }
 
-    // one write at a time, and once more if one fails (not as Blobs: private windows
-    // of Safari can't keep them)
-    put(index, buf, cb = () => {}) {
-      // only the piece itself, not a bigger buffer it may be part of
-      const data = (buf.byteOffset === 0 && buf.byteLength === buf.buffer.byteLength)
-        ? new Uint8Array(buf.buffer)
-        : new Uint8Array(buf);
-      const write = (db) => new Promise((resolve, reject) => {
-        const tx = db.transaction('chunks', 'readwrite');
-        tx.objectStore('chunks').put(data, index);
-        tx.oncomplete = () => resolve();
-        tx.onerror = (e) => { e.preventDefault(); reject(tx.error); };
-        tx.onabort = () => reject(tx.error);
-      });
-      this.writes = (this.writes || Promise.resolve())
-        .then(() => this.db)
-        .then((db) => write(db).catch(() => write(db)))
-        .then(() => cb(null), (err) => cb(err));
-    }
+  // a piece of a file, and how much of the file is kept with it (in one transaction)
+  function putPiece(db, path, index, data, kept) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(['chunks', 'files'], 'readwrite');
+      tx.objectStore('chunks').put(data, [path, index]);
+      tx.objectStore('files').put(kept, path);
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => { e.preventDefault(); reject(tx.error); };
+      tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+    });
+  }
 
-    get(index, opts, cb) {
-      if (typeof opts === 'function') {
-        cb = opts;
-        opts = null;
+  async function keptBytes(db, path) {
+    return (await request(db.transaction('files').objectStore('files').get(path))) || 0;
+  }
+
+  // a kept file, all of it
+  async function readFile(dbName, path, size) {
+    const db = await openDatabase(dbName);
+    try {
+      const range = IDBKeyRange.bound([path, 0], [path, Infinity]);
+      const pieces = await request(db.transaction('chunks').objectStore('chunks').getAll(range));
+      const data = new Uint8Array(size);
+      let offset = 0;
+      for (const piece of pieces) {
+        data.set(new Uint8Array(piece), offset);
+        offset += piece.byteLength;
       }
-      this.db.then((db) => request(db.transaction('chunks').objectStore('chunks').get(index)))
-        .then((data) => {
-          if (!data) {
-            cb(new Error('Chunk not found'));
-            return;
-          }
-          const offset = (opts && opts.offset) || 0;
-          const length = (opts && opts.length) || (data.length - offset);
-          cb(null, offset === 0 && length === data.length ? data : data.subarray(offset, offset + length));
-        }, cb);
-    }
-
-    close(cb = () => {}) {
-      this.closed = true;
-      this.db.then((db) => { db.close(); cb(null); }, () => cb(null));
-    }
-
-    destroy(cb = () => {}) {
-      this.close(() => {
-        const req = indexedDB.deleteDatabase(this.name);
-        req.onsuccess = () => cb(null);
-        req.onerror = () => cb(req.error);
-      });
+      if (offset !== size) throw new Error(`${path} is incomplete in this browser's storage: clear the assets and download it again.`);
+      return data.buffer;
+    } finally {
+      db.close();
     }
   }
 
   // other versions of the demo data are not needed any more
-  async function deleteOtherVersions(prefix, infoHash) {
+  async function deleteOtherVersions(prefix, version) {
     if (!indexedDB.databases) return;
     for (const { name } of await indexedDB.databases()) {
-      if (name.startsWith(prefix) && name !== prefix + infoHash) {
+      if (name.startsWith(prefix) && name !== prefix + version) {
         indexedDB.deleteDatabase(name);
       }
     }
   }
 
-  async function fetchOk(url) {
-    const response = await fetch(url);
+  async function fetchOk(url, options) {
+    const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}: ${url}`);
     }
     return response;
   }
 
-  const stripRoot = (path) => path.replace(/^demo\//, '');
+  // where a site's files are (a folder with demo/... in it), ending in a slash
+  const siteUrl = (url) => new URL('.', new URL(url.replace(/\/?$/, '/'), location.href)).href;
+  const fileUrl = (base, path) => new URL(`demo/${path.split('/').map(encodeURIComponent).join('/')}`, base).href;
 
-  // WebTorrent's module asks for the origin's private file system when it loads, and
-  // doesn't handle that failing (in private windows); it isn't used here (pieces go to
-  // IndexedDB), so such a failure is kept from becoming an error on the page
-  async function importWebTorrent() {
-    const storage = navigator.storage;
-    const getDirectory = storage && storage.getDirectory;
-    if (getDirectory) {
-      // (shadows StorageManager.prototype.getDirectory until the module has loaded)
-      storage.getDirectory = () => getDirectory.call(storage).catch(() => new Promise(() => {}));
-    }
-    try {
-      return (await import('./webtorrent.min.js')).default;
-    } finally {
-      if (getDirectory) delete storage.getDirectory;
-    }
-  }
-
-  // where a web seed's files are (a folder with demo/... in it), ending in a slash
-  const seedUrl = (url) => new URL('.', new URL(url.replace(/\/?$/, '/'), location.href)).href;
-
-  async function downloadWithWebTorrent(info, { base, prefix, p2p, trackers, mirrors, onProgress, log }) {
-    // (WebTorrent checks pieces with crypto.subtle, which browsers only have on https and localhost)
-    if (!window.crypto.subtle) {
-      throw new Error('it needs this page on https');
-    }
-    const WebTorrent = await importWebTorrent();
-    const torrentFile = new Uint8Array(await (await fetchOk(`${base}demo-page.torrent`)).arrayBuffer());
-    const client = new WebTorrent({ tracker: p2p ? {} : false, dht: false, lsd: false, utPex: p2p });
-    const seed = seedUrl(base || '.');
-
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      let timer = 0;
-      const fail = (err) => {
-        if (settled) return;
-        settled = true;
-        clearInterval(timer);
-        client.destroy();
-        reject(err);
-      };
-      client.on('error', fail);
-
-      // (the store takes its database's name when it is made, now)
-      dbPrefix = prefix;
-      const torrent = client.add(torrentFile, { announce: p2p ? trackers : [], store: IdbChunkStore });
-      torrent.on('error', fail);
-      torrent.on('warning', (err) => log(`WebTorrent: ${err.message || err}`));
-
-      let lastActivity = -1;
-      let lastProgressTime = performance.now();
-
-      // the site as a source: right away without other players or mirrors, else when they
-      // don't do
-      let haveMetadata = false;
-      let siteAsked = false;
-      let slowSince = 0;
-      const lookingSince = performance.now();
-      const waitMs = p2p ? PEER_WAIT_MS : MIRROR_WAIT_MS;
-      const askSite = (why) => {
-        if (siteAsked || settled || !haveMetadata) return;
-        siteAsked = true;
-        log(`Demo download: from the site too (${why})`);
-        torrent.addWebSeed(seed);
-        // (the stall check starts now)
-        lastProgressTime = performance.now();
-      };
-      torrent.once('metadata', () => {
-        haveMetadata = true;
-        for (const mirror of mirrors) {
-          log(`Demo download: from the mirror ${mirror}`);
-          torrent.addWebSeed(mirror);
-        }
-        if (!p2p && mirrors.length === 0) askSite('not from other players');
-      });
-
-      timer = setInterval(() => {
-        const now = performance.now();
-        const peers = torrent.wires.filter((wire) => wire.type !== 'webSeed').length;
-        // (seconds left before the site is asked, while looking for other players)
-        const waitLeft = siteAsked || !p2p ? null : Math.max(0, Math.ceil((waitMs - (now - lookingSince)) / 1000));
-        onProgress(torrent.progress || 0, peers, waitLeft);
-        if (!siteAsked && torrent.progress < 1) {
-          if (torrent.downloadSpeed >= PEER_SPEED_ENOUGH) {
-            slowSince = 0;
-          } else if (!slowSince) {
-            slowSince = now;
-          }
-          if (now - lookingSince >= waitMs && slowSince && now - slowSince >= Math.min(PEER_SLOW_MS, now - lookingSince)) {
-            const others = [p2p && 'other players', mirrors.length && 'mirrors'].filter((x) => x).join(' and ');
-            askSite(torrent.downloaded > 0 ? `${others} are too slow` : `nothing from ${others}`);
-          }
-        }
-        // (pieces verified: arriving, or from IndexedDB on a later visit; not just bytes
-        // received, as pieces that keep failing are received again and again; while
-        // only other players are asked, waiting for them isn't a stall)
-        const activity = torrent.downloaded;
-        if (activity !== lastActivity || torrent.progress === 1 || !siteAsked) {
-          lastActivity = activity;
-          lastProgressTime = now;
-        } else if (now - lastProgressTime > STALL_MS) {
-          fail(new Error('the download stalled'));
-        }
-      }, 250);
-
-      torrent.once('done', () => {
-        if (settled) return;
-        settled = true;
-        clearInterval(timer);
-        onProgress(1, 0);
-        // received from other players, mirrors and this site (a fresh visit; on later ones
-        // nothing is downloaded)
-        const mb = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
-        // (a web seed's wire doesn't say which one it is: WebTorrent's peers, by URL, do)
-        const fromSeed = (url) => {
-          const peer = torrent._peers && torrent._peers.get(url);
-          return (peer && peer.wire && peer.wire.downloaded) || 0;
-        };
-        const fromSite = fromSeed(seed);
-        const fromMirrors = mirrors.reduce((sum, url) => sum + fromSeed(url), 0);
-        log(`Demo data ready (${mb(torrent.received)} downloaded, ${mb(fromMirrors)} of it from mirrors, `
-          + `${mb(fromSite)} from the site)`);
-        // (without WebRTC there is no one to share them with)
-        if (p2p) client.throttleUpload(UPLOAD_LIMIT);
-        DemoDownload.client = client;
-        DemoDownload.clients.push(client);
-        deleteOtherVersions(prefix, torrent.infoHash).catch(() => {});
-        resolve(torrent.files.map((file) => ({
-          path: stripRoot(file.path),
-          size: file.length,
-          read: () => file.arrayBuffer(),
-          // (where its bytes are among the pieces kept in IndexedDB, to read them from there)
-          pieces: { db: prefix + torrent.infoHash, pieceLength: torrent.pieceLength, offset: file.offset },
-        })));
-      });
-    });
-  }
-
-  // a file from the first of the sites that has it
-  async function fetchFromAny(bases, path) {
-    let error = null;
-    for (const base of bases) {
-      try {
-        return await fetchOk(new URL(path, base).href);
-      } catch (e) {
-        error = e;
+  // the rest of a file (from byte `from`, a piece's start) from one source, into its pieces:
+  // how many bytes are kept then. onBytes(n, at) is called as they arrive (at: how much of the
+  // file is there with them)
+  async function fetchInto(db, file, base, from, onBytes) {
+    const response = await fetchOk(fileUrl(base, file.path), from > 0 ? { headers: { Range: `bytes=${from}-` } } : {});
+    // (a source that sends all of it: from the start)
+    let kept = response.status === 206 ? from : 0;
+    let at = kept;
+    const reader = response.body.getReader();
+    let piece = new Uint8Array(CHUNK_SIZE);
+    let filled = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // (not another file)
+      if (at + value.length > file.size) {
+        throw new Error(`${fileUrl(base, file.path)}: more than ${file.size} bytes`);
       }
+      for (let offset = 0; offset < value.length;) {
+        const n = Math.min(CHUNK_SIZE - filled, value.length - offset);
+        piece.set(value.subarray(offset, offset + n), filled);
+        filled += n;
+        offset += n;
+        if (filled === CHUNK_SIZE) {
+          await putPiece(db, file.path, kept / CHUNK_SIZE, piece.buffer, kept + CHUNK_SIZE);
+          kept += CHUNK_SIZE;
+          piece = new Uint8Array(CHUNK_SIZE);
+          filled = 0;
+        }
+      }
+      at += value.length;
+      onBytes(value.length, at);
     }
-    throw error;
+    if (filled > 0) {
+      await putPiece(db, file.path, kept / CHUNK_SIZE, piece.slice(0, filled).buffer, kept + filled);
+      kept += filled;
+    }
+    if (kept !== file.size) {
+      throw new Error(`${fileUrl(base, file.path)}: ${kept} bytes instead of ${file.size}`);
+    }
+    return kept;
   }
 
-  async function downloadWithHttp(info, { base, mirrors, onProgress }) {
-    const total = info.files.reduce((sum, file) => sum + file.length, 0);
-    const bases = [...mirrors, seedUrl(base || '.')];
+  // without IndexedDB: the files into memory, one by one, from the first source that has them
+  async function downloadToMemory(info, sources, site, onProgress, log) {
+    const total = info.files.reduce((sum, file) => sum + file.size, 0);
     let done = 0;
+    let fromSite = 0;
     const files = [];
     for (const file of info.files) {
-      const response = await fetchFromAny(bases, `demo/${file.path.split('/').map(encodeURIComponent).join('/')}`);
-      const reader = response.body.getReader();
-      const chunks = [];
-      for (;;) {
-        const { done: end, value } = await reader.read();
-        if (end) break;
-        chunks.push(value);
-        done += value.length;
-        onProgress(done / total, 0);
+      let error = null;
+      for (const base of sources) {
+        try {
+          const response = await fetchOk(fileUrl(base, file.path));
+          const reader = response.body.getReader();
+          const chunks = [];
+          let size = 0;
+          for (;;) {
+            const { done: end, value } = await reader.read();
+            if (end) break;
+            chunks.push(value);
+            size += value.length;
+            onProgress(Math.min((done + size) / total, 1));
+          }
+          if (size !== file.size) throw new Error(`${fileUrl(base, file.path)}: ${size} bytes instead of ${file.size}`);
+          done += size;
+          if (base === site) fromSite += size;
+          const data = new Blob(chunks);
+          files.push({ path: file.path, size, read: () => data.arrayBuffer() });
+          error = null;
+          break;
+        } catch (e) {
+          error = e;
+        }
       }
-      const data = new Blob(chunks);
-      files.push({ path: file.path, size: data.size, read: () => data.arrayBuffer() });
+      if (error) throw error;
     }
+    const mb = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
+    log(`Demo data ready (${mb(done)} downloaded, ${mb(done - fromSite)} of it from mirrors, ${mb(fromSite)} from the site)`);
     return files;
   }
 
-  // the demo's files as [{ path, size, read() -> Promise<ArrayBuffer> }]
-  //   base:       the folder with the demo (demo-torrent.json, demo-page.torrent, demo/), relative
-  //               to the page ('' for its own folder)
+  // the demo's files as [{ path, size, read() -> Promise<ArrayBuffer>, pieces: { db, name } }]
+  //   base:       the folder with the demo (demo-files.json, demo/), relative to the page ('' for
+  //               its own folder)
   //   prefix:     the start of its IndexedDB databases' names (one demo's own)
-  //   p2p:        also get them from (and share them with) other players
-  //   trackers:   trackers to find other players with (default: the ones the build lists)
   //   mirrors:    more web sites with the files, besides the ones the build lists
-  //   onProgress: called with (fraction done, number of other players connected, seconds
-  //               left before the site is asked too, or null once it is)
-  async function download({ base = '', prefix = DB_PREFIX, p2p = true, trackers = null, mirrors = [],
-    onProgress = () => {}, log = () => {} } = {}) {
-    const info = await (await fetchOk(`${base}demo-torrent.json`)).json();
-    const site = seedUrl(base || '.');
-    mirrors = [...new Set([...(info.webSeeds || []), ...mirrors].map(seedUrl))].filter((url) => url !== site);
+  //   onProgress: called with the fraction done
+  async function download({ base = '', prefix = DB_PREFIX, mirrors = [], onProgress = () => {}, log = () => {} } = {}) {
+    const info = await (await fetchOk(`${base}demo-files.json`)).json();
+    const site = siteUrl(base || '.');
+    mirrors = [...new Set([...(info.mirrors || []), ...mirrors].map(siteUrl))].filter((url) => url !== site);
+    const sources = [...mirrors, site];
     if (navigator.storage && navigator.storage.persist) {
       navigator.storage.persist().catch(() => {});
     }
+    const dbName = prefix + info.version;
+    let db;
     try {
-      return await downloadWithWebTorrent(info, { base, prefix, p2p, trackers: trackers || info.trackers, mirrors, onProgress, log });
+      db = await openDatabase(dbName);
     } catch (e) {
-      log(`Downloading with WebTorrent failed (${e.message || e}), downloading the files directly`);
-      return downloadWithHttp(info, { base, mirrors, onProgress });
+      log(`Demo download: this browser can't keep it (${e.message || e}), into memory`);
+      return downloadToMemory(info, sources, site, onProgress, log);
     }
+    const total = info.files.reduce((sum, file) => sum + file.size, 0);
+    // bytes downloaded now, all and from the site (the rest from mirrors)
+    let fromSources = 0;
+    let fromSite = 0;
+    try {
+      // (what is kept of each file)
+      const kept = new Map();
+      for (const file of info.files) kept.set(file.path, await keptBytes(db, file.path));
+      const progress = () => onProgress(total ? Math.min([...kept.values()].reduce((a, b) => a + b, 0) / total, 1) : 1);
+      progress();
+      // the first source that works, the next one when it fails (on from where it stopped)
+      let source = 0;
+      for (const file of info.files) {
+        let failures = 0;
+        while (kept.get(file.path) < file.size) {
+          const base = sources[source];
+          const before = kept.get(file.path);
+          try {
+            kept.set(file.path, await fetchInto(db, file, base, before, (n, at) => {
+              fromSources += n;
+              if (base === site) fromSite += n;
+              kept.set(file.path, at);
+              progress();
+            }));
+          } catch (e) {
+            const now = await keptBytes(db, file.path);
+            kept.set(file.path, now);
+            progress();
+            if (now > before) failures = 0;
+            if (++failures >= TRIES) {
+              failures = 0;
+              if (++source >= sources.length) throw e;
+              log(`Demo download: ${e.message || e}; from ${sources[source] === site ? 'the site' : `the mirror ${sources[source]}`}`);
+            }
+          }
+        }
+      }
+    } finally {
+      db.close();
+    }
+    onProgress(1);
+    const mb = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
+    log(`Demo data ready (${mb(fromSources)} downloaded, ${mb(fromSources - fromSite)} of it from mirrors, ${mb(fromSite)} from the site)`);
+    deleteOtherVersions(prefix, info.version).catch(() => {});
+    return info.files.map((file) => ({
+      path: file.path,
+      size: file.size,
+      read: () => readFile(dbName, file.path, file.size),
+      // (where its pieces are kept, to read them from there)
+      pieces: { db: dbName, name: file.path },
+    }));
   }
 
-  window.DemoDownload = { download, client: null, clients: [] };
+  window.DemoDownload = { download };
 })();

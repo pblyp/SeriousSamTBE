@@ -8,14 +8,13 @@ rendering with WebGL 2, playable in a web browser on computers and phones.
 **Play it: <https://pblyp.github.io/SeriousSamClassic/>**
 
 - **The demo, out of the box.** The official Karnak demo level (about 80 MB) is downloaded
-  once and kept in the browser. It comes from other players who have the page open
-  (WebTorrent), and from the site when there are none.
+  once and kept in the browser.
 - **The full game, with your own copy.** Zip the folder where *The First Encounter* is
   installed and pick the .zip on the start page. Your files never leave your device; they
   are kept in the browser, so next time *Play my game files* starts the game without the .zip.
 - **Network games.** The player who starts a game gets a room code and a link to send to
-  the others. Browsers connect directly (WebRTC), or through the page's server when it
-  can pass games on.
+  the others. The games go through the page's server, when it can pass them on (the
+  included server can; GitHub Pages can't).
 - **Touch screens.** Phones and tablets get on-screen controls: an analog stick under the
   left thumb, dragging on the right to look, and buttons.
 - **Settings and saved games** stay in the browser. *Clear my data* on the start page
@@ -58,12 +57,8 @@ Playing
 - **Network games:** in the game's menu, Network → Start. A badge shows the room code with
   *Copy link* and *Share*. The others open the link, or type the code under Network →
   Join → Specify server. The demo has a cooperative level (Karnak) and a deathmatch
-  level (Desert Temple).
-- **WebRTC** is off by default: the demo comes from the site (and its mirrors), and
-  network games go through the page's server, if it can pass them on (GitHub Pages
-  can't). Open the page with `?webrtc=true` to download the demo from other players too
-  (your browser then shares it while you play: only the free demo) and to connect network
-  games directly.
+  level (Desert Temple). They need the page opened from a server that passes games on (see
+  [Running it yourself](#running-it-yourself)).
 
 Running it yourself
 -------------------
@@ -122,15 +117,10 @@ node web/test/server.mjs 8080 0.0.0.0
 Open <http://localhost:8080/>. Other devices on your network open
 `http://<this computer's address>:8080/`.
 
-- **Network games without the internet.** Players who open the page from this server find
-  each other through it. The server also passes games on when browsers can't connect to
-  each other directly (some networks, and sandboxed or locked-down browsers).
-- **Plain http on the local network** (not localhost): browsers don't offer the
-  cryptography WebRTC and WebTorrent need there. The demo then downloads directly from the
-  server, and network games run through it.
-- **Any other web server** works too. It must answer range requests, which the demo's
-  files need as the torrent's web seed. Network games then use public signaling servers
-  and WebRTC only.
+- **Network games**, also without the internet: players who open the page from this
+  server play through it.
+- **Any other web server** works too, without network games. It should answer range
+  requests: a demo download that stopped goes on from where it was.
 
 ### Hosting it on GitHub Pages
 
@@ -145,15 +135,8 @@ Open <http://localhost:8080/>. Other devices on your network open
 
 The site is then at `https://<user>.github.io/SeriousSamClassic/`.
 
-On Pages, the demo comes from other players first. The site is only asked when none are
-found within 15 seconds, which spares its bandwidth (100 GB a month).
-
-To take load off the site and help players get the demo, keep a seeder running somewhere
-with a WebTorrent client that speaks WebRTC, for example:
-```sh
-npm install -g webtorrent-cli@6
-webtorrent download https://<user>.github.io/SeriousSamClassic/demo.torrent --keep-seeding
-```
+Pages allows 100 GB of traffic a month: [demo mirrors](web/README.md#demo-mirrors) take
+load off the site. Network games don't work there (Pages can't pass them on).
 
 ### Tests
 
@@ -170,10 +153,9 @@ Troubleshooting
 
 - **The page doesn't start, or the fullscreen option is missing:** some content blockers
   block scripts with "fullscreen" in their name. The game works without it.
-- **Network games don't connect:** open the page with `?log&netdebug` to see how the
-  browsers try to connect. Some networks need a TURN server (`?turn=turn:user:password@host:3478`).
-  Some browsers can't do WebRTC at all: sandboxed Snap/Flatpak builds, strict privacy
-  settings, proxies. On your own server they play through the server instead.
+- **Network games don't connect:** the page must come from a server that passes games on
+  (`web/test/server.mjs`, see [Running it yourself](#running-it-yourself)), the same one
+  for all players. Open the page with `?log` to see what happens.
 - **The game doesn't start with your files:** the page explains what is wrong (for example
   a damaged `.gro` file) and offers to start over or clear the stored data.
 

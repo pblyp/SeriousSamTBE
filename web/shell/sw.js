@@ -8,9 +8,9 @@
 // cache holds what the last visit used, all of one version.
 //
 // Not handled here (straight to the network, never cached): the demo's files (demo/...,
-// asked in parts by WebTorrent, whose pieces are kept in IndexedDB), the game data
-// packages (*.data, kept by Emscripten in IndexedDB), lan-signal.json (what the page's
-// server offers right now), requests for parts of files, and other sites.
+// kept in IndexedDB by demo-download.js), the game data packages (*.data, kept by Emscripten
+// in IndexedDB), net-hub.json (what the page's server offers right now), requests for parts
+// of files, and other sites.
 
 // what differs between the versions of the game sharing this page (see config.js): each
 // version's worker has its own cache
@@ -19,12 +19,12 @@ const Game = self.GameConfig;
 const CACHE = Game.cache;
 // what the page needs to start, kept from the start: the first visit loads it before this
 // worker takes over (the rest is kept as it is used)
-// (the demos' descriptions: The Both Encounters' first one is the site's, outside its folder)
-const DEMO_FILES = Game.demos ? Game.demos.flatMap(({ base }) => [`${base}demo-torrent.json`, `${base}demo-page.torrent`])
-  : Game.demo ? ['demo-torrent.json', 'demo-page.torrent'] : [];
+// (the demos' file lists: The Both Encounters' first one is the site's, outside its folder)
+const DEMO_FILES = Game.demos ? Game.demos.map(({ base }) => `${base}demo-files.json`)
+  : Game.demo ? ['demo-files.json'] : [];
 const SHELL = [
   './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js', 'archives.js',
-  'netplay.js', 'touch.js', 'gamepad.js', 'webtorrent.min.js', 'netplay-signal.js', 'base-data.js',
+  'netplay.js', 'touch.js', 'gamepad.js', 'base-data.js',
   ...DEMO_FILES, 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-256.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
 ];
@@ -54,7 +54,7 @@ function handled(request) {
   const path = url.pathname.slice(scope.length);
   // (the other versions' folders have workers of their own; a first visit there comes here)
   if (Game.otherVersions.some((folder) => path.startsWith(folder))) return false;
-  return !path.startsWith('demo/') && !path.endsWith('.data') && path !== 'lan-signal.json';
+  return !path.startsWith('demo/') && !path.endsWith('.data') && path !== 'net-hub.json';
 }
 
 self.addEventListener('fetch', (event) => {
@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
     try {
       const response = await fetch(request);
       if (response.ok) {
-        // (the page is kept without its query: ?join=..., ?webrtc=true are the same page)
+        // (the page is kept without its query: ?join=... is the same page)
         const key = request.mode === 'navigate' ? new URL(request.url).pathname : request;
         cache.put(key, response.clone()).catch(() => {});
       }

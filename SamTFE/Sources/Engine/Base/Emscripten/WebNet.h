@@ -19,9 +19,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
   #pragma once
 #endif
 
-// Network games in the browser: the engine's UDP packets travel over WebRTC data
-// channels (web/shell/netplay.js), between the player who hosts (the server) and
-// the players who join (clients). Each other player has a made up IPv4 address.
+// Network games in the browser: the engine's UDP packets travel through the page server's
+// packet hub (web/shell/netplay.js), between the player who hosts (the server) and the
+// players who join (clients). Each other player has a made up IPv4 address.
 
 // start (server: create a room for others to join) or stop the network transport
 ENGINE_API BOOL Web_Net_Open(BOOL bServer);

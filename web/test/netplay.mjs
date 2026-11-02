@@ -6,22 +6,14 @@
 // A third player joins after that, and is told when the host leaves. A link to a
 // room nobody is in says so.
 //
-//  0. connections that close, come back and are replaced (as WebRTC signaling does),
-//     with a stand-in transport: a player only leaves when none is left for a while
-//  1. "No WebRTC": through the page server's hub, which passes the packets on
-//  2. over WebRTC only (no hub), finding each other through the page's server (as on a
-//     local network; where direct connections don't work, e.g. behind some VPNs, through
-//     a local TURN server)
-//  3. "WebRTC" where WebRTC can't connect: the game goes through the page server's
-//     hub instead (only run where direct WebRTC connections fail)
-//  4. a page on plain http without the hub: no WebRTC there (browsers have no crypto.subtle),
-//     and it says what to do
+//  0. connections that close, come back and are replaced, with a stand-in transport: a
+//     player only leaves when none is back after a while
+//  1. through the page server's hub, which passes the packets on
+//  2. a site without a hub (as GitHub Pages): the page says so
 //
 //   node netplay.mjs [--out dir] [--build jspi|asyncify] [--seconds N (how long to play, 18)]
 
 import { chromium } from 'playwright';
-import { createWsRelayServer } from '@trystero-p2p/ws-relay/server';
-import Turn from 'node-turn';
 import { serve } from './server.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -36,19 +28,17 @@ const secondsIndex = process.argv.indexOf('--seconds');
 const playSeconds = secondsIndex > 0 ? Number(process.argv[secondsIndex + 1]) : 18;
 
 const server = await serve();
-// (sam.test: an address that isn't localhost, so a page there has no crypto.subtle)
-const browser = await chromium.launch({ headless: true, args: ['--use-angle=metal', '--autoplay-policy=no-user-gesture-required',
-  '--disable-features=WebRtcHideLocalIpsWithMdns', '--host-resolver-rules=MAP sam.test 127.0.0.1'] });
+const browser = await chromium.launch({ headless: true, args: ['--use-angle=metal', '--autoplay-policy=no-user-gesture-required'] });
 const results = {};
 const errors = [];
 
-async function openPlayer(name, query, origin = server.url) {
+async function openPlayer(name, query, { noHub = false } = {}) {
   // (a context each: storage, and so player profiles, of their own)
-  const context = await browser.newContext({ viewport: { width: 800, height: 500 } });
+  const context = await browser.newContext({ viewport: { width: 800, height: 500 }, serviceWorkers: noHub ? 'block' : 'allow' });
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(`${name}: ${e.stack || e.message}`));
-  // (by default "No WebRTC": the demo from the site, games through the page server's hub)
-  await page.goto(`${origin}/index.html?autostart=1${buildQuery}&${query}`);
+  if (noHub) await page.route(/net-hub\.json/, (route) => route.fulfill({ status: 404, body: 'not found' }));
+  await page.goto(`${server.url}/index.html?autostart=1${buildQuery}&${query}`);
   return page;
 }
 const engineLog = (page) => page.evaluate(() => window.engineLog);
@@ -59,9 +49,6 @@ async function play(label, transportQuery) {
   await host.waitForFunction(() => Module.netplay && Module.netplay.code && Module.webGameInput, null, { timeout: 120000 });
   const code = await host.evaluate(() => Module.netplay.code);
   const badge = await host.textContent('#net-badge-text');
-  if (label.startsWith('webrtc')) {
-    results[`${label}: players find each other through the page's server`] = await logHas(host, /find each other through this page's server/);
-  }
 
   const client = await openPlayer('client', `${transportQuery}&join=${code}&quickjoin`);
   let joined = true;
@@ -73,8 +60,7 @@ async function play(label, transportQuery) {
   results[`${label}: host shows the room (${badge})`] = /^Room [A-Z0-9]{3}-[A-Z0-9]{3} · waiting for players$/.test(badge);
   results[`${label}: the second player joins with the code`] = joined && await logHas(host, /CRC check OK/);
   const via = joined ? await client.evaluate(() => Module.netplay.via) : '';
-  if (label.startsWith('webrtc')) results[`${label}: connected with WebRTC (${via})`] = via === 'with WebRTC';
-  if (label.startsWith('fallback')) results[`${label}: connected through the page's server (${via})`] = via === 'through this page\'s server';
+  results[`${label}: connected through the page's server (${via})`] = via === 'through this page\'s server';
   if (!joined) {
     console.log((await engineLog(client)).slice(-15).join('\n'));
     await host.context().close();
@@ -134,19 +120,19 @@ async function play(label, transportQuery) {
     await wait(10);
     const P = 0x0A530002;  // 10.83.0.2
     const [a, b, b2, c] = [channel(), channel(), channel(), channel()];
-    hostSide.listeners.link('torrent:P', 'P', { channel: a, sendRole() {} });
+    hostSide.listeners.link('hub:P', 'P', { channel: a, sendRole() {} });
     host.send(P, 0, new Uint8Array(1));
     steps.push(['joined', a.sent === 1 && host.players === 1]);
-    hostSide.listeners.link('nostr:P', 'P', { channel: b, sendRole() {} });
+    hostSide.listeners.link('local:P', 'P', { channel: b, sendRole() {} });
     drop(a);
     host.send(P, 0, new Uint8Array(1));
     steps.push(['one connection closes, the other carries on', b.sent === 1 && host.players === 1 && host.takeDeparted() === 0]);
-    hostSide.listeners.link('nostr:P', 'P', { channel: b2, sendRole() {} });
+    hostSide.listeners.link('local:P', 'P', { channel: b2, sendRole() {} });
     host.send(P, 0, new Uint8Array(1));
     steps.push(['a connection is replaced', b2.sent === 1 && b.readyState === 'closed']);
     drop(b2);
     await wait(100);
-    hostSide.listeners.link('torrent:P', 'P', { channel: c, sendRole() {} });
+    hostSide.listeners.link('hub:P', 'P', { channel: c, sendRole() {} });
     await wait(400);
     steps.push(['all close, one comes back in time', host.takeDeparted() === 0 && host.players === 1]);
     drop(c);
@@ -161,12 +147,12 @@ async function play(label, transportQuery) {
     const joining = client.join('K7Q-2MX');
     await wait(10);
     const [h1, h2] = [channel(), channel()];
-    clientSide.listeners.link('torrent:H', 'H', { channel: h1, sendRole() {} });
+    clientSide.listeners.link('hub:H', 'H', { channel: h1, sendRole() {} });
     clientSide.listeners.role('H', 'host');
     const hostIp = await joining;
     drop(h1);
     await wait(100);
-    clientSide.listeners.link('nostr:H', 'H', { channel: h2, sendRole() {} });
+    clientSide.listeners.link('local:H', 'H', { channel: h2, sendRole() {} });
     await wait(400);
     client.send(hostIp, 0, new Uint8Array(1));
     steps.push(['the host\'s connection is replaced in time', client.state === 'joined' && h2.sent === 1]);
@@ -192,52 +178,14 @@ await play('hub', '');
   await lost.context().close();
 }
 
-// 2. over WebRTC
-async function webRtcWorks() {
-  const page = await browser.newPage();
-  const ok = await page.evaluate(async () => {
-    const a = new RTCPeerConnection();
-    const b = new RTCPeerConnection();
-    a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate);
-    b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
-    const channel = a.createDataChannel('check');
-    const opened = new Promise((resolve) => { channel.onopen = () => resolve(true); setTimeout(() => resolve(false), 5000); });
-    await a.setLocalDescription(await a.createOffer());
-    await b.setRemoteDescription(a.localDescription);
-    await b.setLocalDescription(await b.createAnswer());
-    await a.setRemoteDescription(b.localDescription);
-    return opened;
-  });
-  await page.close();
-  return ok;
-}
-const relay = createWsRelayServer({ host: '127.0.0.1', port: 0 });
-await relay.ready;
-const signal = encodeURIComponent(`ws://127.0.0.1:${relay.address().port}`);
-const webRtc = await webRtcWorks();
-if (webRtc) {
-  await play('webrtc', 'webrtc=true&nethub=off');
-} else {
-  const turn = new Turn({ listeningPort: 3478, listeningIps: ['127.0.0.1'], relayIps: ['127.0.0.1'],
-    authMech: 'long-term', credentials: { sam: 'sam' }, debugLevel: 'OFF' });
-  turn.start();
-  await play('webrtc (TURN)', `webrtc=true&nethub=off&turn=${encodeURIComponent('turn:sam:sam@127.0.0.1:3478')}`);
-  turn.stop();
-  // 3. WebRTC chosen, but it can't connect here: through the page server's hub
-  await play('fallback', 'webrtc=true');
-}
-
-// 4. plain http without the page server's hub: WebRTC can't work there (no crypto.subtle),
-// and the page says what to do
+// 2. a site without the hub: hosting says why nobody can join
 {
-  const http = await openPlayer('http host', `webrtc=true&nethub=off&signal=${signal}&args=${encodeURIComponent('+level Levels/KarnakDemo.wld +server')}`,
-    server.url.replace('127.0.0.1', 'sam.test'));
-  await http.waitForFunction(() => Module.netplay && Module.netplay.state === 'failed', null, { timeout: 120000 }).catch(() => {});
-  results['plain http without a hub explains itself'] =
-    (await http.textContent('#net-badge-text')).startsWith('WebRTC needs this page on https');
-  await http.context().close();
+  const host = await openPlayer('no hub', `args=${encodeURIComponent('+level Levels/KarnakDemo.wld +server')}`, { noHub: true });
+  await host.waitForFunction(() => Module.netplay && Module.netplay.state === 'failed', null, { timeout: 120000 }).catch(() => {});
+  const text = await host.textContent('#net-badge-text');
+  results[`a site without a hub says so (${text})`] = text.startsWith('This site can\'t pass network games on');
+  await host.context().close();
 }
-await relay.close();
 
 await browser.close();
 server.close();

@@ -40,6 +40,5 @@ self.GameConfig = {
   optionPrefix: 'tbo.',
   cache: 'tbo-app',
   otherVersions: [],
-  netAppId: 'serioussam-tbo-web',
   netRoomPrefix: 'tbo-',
 };

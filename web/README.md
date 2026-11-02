@@ -24,21 +24,21 @@ web/build.sh Release all tbo       # only The Both Encounters
 
 The first build downloads the demo (`SeriousSamDemo.exe`) and the 1.05 patch
 from archive.org, extracts them (`fetch_demo_data.sh`) and prepares the data
-(`package_demo.sh`): the demo's files in `demo/` and a torrent of them
-(`tools/make_torrent.mjs`), and a package of this repository's game files for
-players who bring their own.
+(`package_demo.sh`): the demo's files in `demo/` and a list of them
+(`demo-files.json`, by `tools/make_demo_list.mjs`), and a package of this repository's
+game files for players who bring their own.
 
 `web/build/dist` is a static site: serve it with any web server, e.g.
 
 ```sh
 node web/test/server.mjs 8080      # add 0.0.0.0 to serve other devices on the network
-                                   # (npm install in web/test first: it also lets network
-                                   # games find each other without the internet)
+                                   # (npm install in web/test first: it also passes network
+                                   # games on)
 ```
 
 and open <http://localhost:8080/>. The `.wasm` (about 4 MB) and `.data` files
-compress well; let the server use brotli or gzip. The server must answer HTTP range
-requests (the demo's files are the torrent's web seed).
+compress well; let the server use brotli or gzip. The server should answer HTTP range
+requests (a demo download that stopped goes on from where it was).
 
 ## Hosting on GitHub Pages
 
@@ -49,8 +49,8 @@ requests (the demo's files are the torrent's web seed).
 2. in the fork's Settings → Pages, set Source to "GitHub Actions";
 3. the game is at `https://<user>.github.io/<repository>/`.
 
-All files are well below Pages' 100 MB limit (the largest is the demo's 54 MB
-`1_00c_demo.gro`), and everything is loaded with relative URLs.
+All files are below Pages' 100 MB limit (the largest is The Second Encounter demo's 84 MB
+`SEDemo1_00.gro`, in `tbo/demo/`), and everything is loaded with relative URLs.
 
 ## The Both Encounters
 
@@ -68,11 +68,11 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
 - **The First Encounter's levels** are recognized by where they come from, and converted
   when loaded (their keys, weapons given at the start, lighting fixes, map).
 - **The demos.** *Play the demos* downloads The First Encounter's demo (the site's
-  `demo/`, shared with its page: the same torrent, and the same IndexedDB copy) and The
-  Second Encounter's (`tbo/demo/`, its own torrent and `tbo-demo-` databases), one after the
-  other (`demos` in its config.js). `web/fetch_tse_demo.sh` downloads The Second Encounter's
+  `demo/`, shared with its page: the same IndexedDB copy) and The Second Encounter's
+  (`tbo/demo/`, its own `tbo-demo-` databases), one after the other (`demos` in its
+  config.js). `web/fetch_tse_demo.sh` downloads The Second Encounter's
   demo from archive.org (checked against `web/tse_demo_data.sha256`) and keeps its group
-  files and levels. The demos' group files are read from the downloaded torrent pieces as
+  files and levels. The demos' group files are read from their downloaded pieces as
   they are needed, like an installation's. The engine sees the Palenque demo level without
   The Second Encounter's levels: New Game starts Karnak, and at its end (after the demo's
   credits) Palenque follows.
@@ -88,8 +88,8 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   track that is playing, when it is an .mp3 (its decoder reads files itself).
 - **Its own storage**, apart from The First Encounter's page on the same site: game files
   in `tbo-own-files`, settings and saved games in `/tbo-user`, the start page's options
-  (`tbo.` prefix), its service worker and cache (`tbo-app`), and its network games
-  (Trystero app id, room names).
+  (`tbo.` prefix), its service worker and cache (`tbo-app`), and its network games' room
+  names.
 - **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations;
   `web/test/archive-reader.mjs` reads every file of the demo's group files from IndexedDB
   through the engine's reader (a test program, `SamTBO/Sources/Tests/ArchiveReaderTest.cpp`)
@@ -130,27 +130,16 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   and the start page's options. Other sites on the same address (e.g. a `github.io`
   account's other projects) are left alone.
   Settings are saved whenever the page is hidden, since a tab can be closed at any time.
-- **Demo download.** `shell/demo-download.js` gets the demo with
-  [WebTorrent](https://webtorrent.io) from its web seeds: [mirrors](#demo-mirrors) first,
-  and the site itself, whose `demo/` files are a web seed too. The site is only asked when
-  the mirrors give nothing within 5 s, or less than 1 MB/s (right away when there are
-  none), which keeps the site's bandwidth (GitHub Pages: 100 GB a month) for those who need
-  it. The pieces are kept in IndexedDB, so later visits download nothing. If WebTorrent
-  can't be used, the files are downloaded one by one (from a mirror, else the site), and
-  not kept: e.g. on plain http addresses other than localhost (a computer on the local
-  network), where browsers don't offer `crypto.subtle` (WebTorrent's SHA-1).
-- **WebRTC** is only used with `?webrtc=true` (on https and localhost), for the demo
-  and for network games. The demo then also comes from other players who have the page
-  open (found through public WebSocket trackers, connected with WebRTC); the site is asked
-  when none are found within 15 s, or they give less than 1 MB/s. The page shares the
-  pieces (at most 1 MB/s) while the game runs, and says so on the start page.
-
-  Only the official demo's files are shared, which to our knowledge may be freely
-  redistributed; the start page explains this to players. Files from a player's own
-  installation are never shared.
-  `demo.torrent` lets BitTorrent clients that speak WebRTC (WebTorrent Desktop,
-  `webtorrent-hybrid`) seed for the players; the build writes the mirrors and the site's
-  URL (when given `SITE_URL`) into it as web seeds.
+- **Demo download.** `shell/demo-download.js` downloads the files that `demo-files.json`
+  lists, from the [mirrors](#demo-mirrors) first, and from the site when they fail, which
+  keeps the site's bandwidth (GitHub Pages: 100 GB a month) for those who need it. Each file
+  is kept in IndexedDB in 1 MB pieces as it arrives (one database per version of the demo
+  data, named after a hash of its files; other versions are deleted), so later visits
+  download nothing, and a download that stopped goes on from where it was (with a range
+  request). Where IndexedDB can't be used, the files are downloaded into memory each visit.
+  Only the official demo's files are downloaded from the site, which to our knowledge may be
+  freely redistributed; the start page explains this to players. Files from a player's own
+  installation never leave their device.
 - **Installing as an app (PWA).** `shell/manifest.webmanifest` (fullscreen, landscape,
   icons made from `SamTFE/serioussam.png`) and the service worker `shell/sw.js` make the
   page installable; Chromium also gets an *Install the app* button on the start page. The
@@ -158,7 +147,7 @@ it into `dist/tbo/`, with the same page (`shell/`) and its own settings
   answers when the site can't be reached; when it installs, it also fetches what the page
   needs to start (the first visit loads it before the worker takes over), including the
   engine build this browser uses. It leaves alone what is kept in IndexedDB anyway (the
-  demo's pieces, `*.data` packages), requests for parts of files, `lan-signal.json` and
+  demo's pieces, `*.data` packages), requests for parts of files, `net-hub.json` and
   other sites. So after one visit the game starts offline, with the demo or the player's
   game files kept in the browser. Only on https and localhost; `?nosw` goes without it.
 - **Size.** The game renders at the size of the canvas (`web_fMaxPixelRatio`, 2 by
@@ -210,48 +199,25 @@ Platform specific code is under `#ifdef PLATFORM_EMSCRIPTEN`.
 ## Network games
 
 The engine's multiplayer works as it always has: the player who starts a network game
-(Network → Start) runs the server, the others join it as clients. Their browsers
-connect with WebRTC, and/or through the page's server (`shell/netplay.js`,
-`Engine/Base/Emscripten/WebNet.cpp`):
+(Network → Start) runs the server, the others join it as clients. Their browsers connect
+through the page's server (`shell/netplay.js`, `Engine/Base/Emscripten/WebNet.cpp`):
 
-- The engine's UDP packets travel over a data channel set up like UDP (unordered, never
-  resent); the engine's own acknowledgements and resends do the rest. All the engine's
-  socket calls are in `CCommunicationInterface::UpdateMasterBuffers()`, which sends and
-  receives through the page instead; the other players get made up addresses (10.83.0.x).
+- The page's server passes the game's packets on: `test/server.mjs` has a WebSocket hub at
+  `/hub` (announced in `/net-hub.json`) that sends each message to the room's other
+  players. A site without one (e.g. GitHub Pages) can't run network games: hosting says so.
+  On a local network, games need no internet. `?nethub=ws://…` uses another hub.
+- The engine's UDP packets go through as they are; the engine's own acknowledgements and
+  resends do the rest. All the engine's socket calls are in
+  `CCommunicationInterface::UpdateMasterBuffers()`, which sends and receives through the
+  page instead; the other players get made up addresses (10.83.0.x).
 - Players meet in a room: starting a network game gives a code like `K7Q-2MX` and a link
   (`index.html?join=K7Q2MX`), shown on the page with *Copy link* and *Share*. Joiners
   open the link, or type the code in Network → Join → Specify server ("Room code").
-- WebRTC needs a way to find the other browser first (signaling), with
-  [Trystero](https://github.com/dmotz/trystero) (`netplay-signal.js`, bundled by
-  `tools/build_libs.mjs`). If the page's server relays it, as `test/server.mjs` does (at
-  `/signal`, announced in `/lan-signal.json`), players who open the page from it find each
-  other there: on a local network, games need no internet, and no STUN or TURN either.
-  Otherwise (e.g. on GitHub Pages) the page uses the public BitTorrent WebSocket trackers
-  and Nostr relays at the same time; `?signal=wss://…` names other Trystero relays, and
-  `?signal=public` uses the public ones in any case.
-  (BitTorrent's DHT can't help here: it needs UDP, which browsers don't have.)
-- If the page's server can pass games on, as `test/server.mjs` does (a WebSocket hub at
-  `/hub`, announced in `/lan-signal.json`), players also connect through it. Games then
-  work when browsers can't connect with WebRTC (some networks, and browsers whose WebRTC
-  is restricted: sandboxed Snap/Flatpak builds, privacy settings, proxies), and without
-  WebRTC at all (the page without `?webrtc=true`). When WebRTC connects too, the game moves to it (the page's
-  log says which way each player is connected). `?nethub=off` leaves the hub out.
-- Without `?webrtc=true`, network games only go through the page's server: not on
-  GitHub Pages, which can't pass them on. Room links carry `webrtc=true` when the host
-  uses it.
-- Signaling encrypts the connection offers with `crypto.subtle`, which browsers only have
-  on https and localhost: on plain http (e.g. a computer on the local network), network
-  games go through the page's server only.
-- Finding each other and trying the ways to connect can take half a minute; joining waits
-  up to 90 s, and the page counts the seconds.
-- Most connections work directly. Some networks (some mobile carriers, company networks)
-  need a TURN server to relay the traffic: `?turn=turn:user:password@host:3478`.
+  Joining waits up to 20 s for the host.
 - The page tells the engine when a player is gone, so a player who leaves is dropped
   within seconds (UDP only notices after `net_tmDisconnectTimeout`), and the others are
-  told when the host leaves. Players can have a connection through each signaling network,
-  and Trystero sometimes replaces connections: a player only counts as gone when none is
-  left for 10 s. Each network has its own Trystero app id, because Trystero shares (and
-  later closes) connections between rooms of the same app.
+  told when the host leaves. A player whose connection closes counts as gone when it isn't
+  back within 10 s.
 - While a network game runs, the game goes on in a hidden tab (with timers instead of
   animation frames, which browsers stop there), so the others aren't stuck when the host
   switches tabs. Browsers slow timers down in background tabs that play no sound, and
@@ -265,9 +231,9 @@ Other web sites can serve the demo, so that players don't use up the site's band
 (and the download goes on when the site is slow). A mirror is a copy of the built
 `web/build/dist/demo/` folder anywhere on the web; its URL is the address of the folder
 that *contains* `demo/` (for `https://cdn.example.org/sam/demo/Levels/…` it is
-`https://cdn.example.org/sam/`). Players' browsers download pieces of the files from it
-with range requests (each piece is checked against the torrent, so a broken mirror can't
-spoil the download), which needs these CORS headers:
+`https://cdn.example.org/sam/`). Players' browsers download the files from it (with range
+requests to go on with a download that stopped; a file of the wrong size is downloaded
+from the next source), which needs these CORS headers:
 
 ```
 Access-Control-Allow-Origin: *
@@ -282,13 +248,12 @@ For example the CORS policy of an S3 or Cloudflare R2 bucket:
    "AllowedHeaders": ["Range"], "ExposeHeaders": ["Content-Range", "Content-Length", "Accept-Ranges"] }]
 ```
 
-The build lists the mirrors in `demo-torrent.json` (and `demo.torrent`) from
-`DEMO_MIRRORS` (comma separated URLs): `DEMO_MIRRORS=https://cdn.example.org/sam/ ./build.sh`.
-The GitHub Pages workflow takes it from the repository variable `DEMO_MIRRORS`
-(Settings → Secrets and variables → Actions → Variables). `?seed=…` adds mirrors for a
-visit (for trying one out). A mirror must have exactly the files of the build's `demo/`,
-which the torrent's pieces are made of; empty files are left out of the torrent and
-needn't be there.
+The build lists the mirrors in `demo-files.json` from `DEMO_MIRRORS` (comma separated
+URLs): `DEMO_MIRRORS=https://cdn.example.org/sam/ ./build.sh`. The GitHub Pages workflow
+takes it from the repository variable `DEMO_MIRRORS` (Settings → Secrets and variables →
+Actions → Variables). `?mirror=…` adds mirrors for a visit (for trying one out). A mirror
+must have exactly the files of the build's `demo/` (those `demo-files.json` lists; empty
+files are left out and needn't be there).
 
 ## Page options
 
@@ -303,16 +268,11 @@ needn't be there.
 | `build=jspi` or `build=asyncify` | force a build |
 | `touch=on`, `off` or `auto` | touch screen controls |
 | `touchdebug` | show what the touch controls receive (for problems on devices) |
-| `webrtc=true` | use WebRTC: the demo from other players too (and shared with them), network games directly between browsers |
-| `seed=https://…` | more [demo mirrors](#demo-mirrors) (comma separated) |
-| `trackers=wss://…` | trackers (comma separated) to find other players with (with `webrtc=true`) |
+| `mirror=https://…` | more [demo mirrors](#demo-mirrors) (comma separated) |
 | `join=K7Q2MX` | join the network game in that room (`quickjoin` to skip the join menu) |
-| `signal=wss://…` | self-hosted Trystero WebSocket relays for network games, instead of the public ones |
-| `turn=turn:user:password@host:port` | a TURN server for network games |
 | `nosw` | without the service worker (no offline start) |
-| `netdebug` | log how network game connections are tried: addresses offered, checks, results (with `log`) |
-| `nethub=ws://…`, `nethub=off` | network games through that hub instead of the page server's, or through none |
-| `net=local` | network games between tabs of this browser, without WebRTC (for tests) |
+| `nethub=ws://…` | network games through that hub instead of the page server's |
+| `net=local` | network games between tabs of this browser (for tests) |
 
 From the browser's console, `Module.webCommands = ['some_command;']` runs console
 commands in the running game. `web_bFrameStats=1;` prints frame timing and how much
@@ -330,9 +290,9 @@ node touch.mjs        # touch screen controls (--size 844x390 for a phone)
 node gamepad.mjs      # gamepads (a stand-in for the Gamepad API) and aim assist
 node mobile.mjs       # phone players' path on an emulated Android phone and iPhone
 node pwa.mjs          # installable app: manifest, service worker, starting offline
-node torrent.mjs      # demo download: from the site, from IndexedDB, from another player, without WebTorrent, from mirrors
-node netplay.mjs      # network games: hosting, joining by code, leaving, signaling from plain http
-node netplay-browsers.mjs  # network games over WebRTC between WebKit, Firefox and Chromium
+node demo-download.mjs  # demo download: from the site, from IndexedDB, on after it stopped, from mirrors
+node netplay.mjs      # network games: hosting, joining by code, leaving, a site without a hub
+node netplay-browsers.mjs  # network games between WebKit, Firefox and Chromium
 node escape.mjs       # Escape with the mouse captured (opens a browser window; not part of npm test)
 node run.mjs --args "+level Levels/KarnakDemo.wld" --seconds 30 --shots 10,20 --out /tmp/shots
 node demo-frames.mjs --frames 30,90 --native <native>/ScreenShots   # compare with a native build
@@ -341,10 +301,7 @@ node demo-frames.mjs --frames 30,90 --native <native>/ScreenShots   # compare wi
 
 `run.mjs` also profiles (`--profile 20,30`, use `--build asyncify`: Chrome doesn't
 attribute WebAssembly running under JSPI) and counts WebGL calls (`--glstats`). The tests
-download the demo from the local server only (without `webrtc=true`; `run.mjs --p2p` uses the public
-trackers). The two-player part of `torrent.mjs` is skipped where WebRTC can't connect
-(e.g. with some VPNs); the network game tests connect through a local TURN server
-(`node-turn`) there.
+download the demo from the local server.
 
 ## Known differences
 
