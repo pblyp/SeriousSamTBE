@@ -69,9 +69,18 @@ for game in $GAMES; do
   node "$WEB_DIR/tools/build_libs.mjs" "$dist"
 done
 
-# 3. the game data: TBO's base package (its players provide all the rest)
+# 3. the game data: TBO's base package (its players provide all the rest), and The Second
+#    Encounter's demo, which its page plays after The First Encounter's (that is the site's,
+#    shared with The First Encounter's page)
 if [[ " $GAMES " == *" tbo "* ]]; then
   "$WEB_DIR/package_base.sh" "$DIST_DIR/tbo" SamTBO >/dev/null
+  if [ ! -d "$BUILD_DIR/tse-demo-data" ]; then
+    "$WEB_DIR/fetch_tse_demo.sh"
+  fi
+  # (without empty files, see package_demo.sh)
+  rsync -a --delete --delete-excluded --min-size=1 --exclude '.DS_Store' "$BUILD_DIR/tse-demo-data/" "$DIST_DIR/tbo/demo/"
+  DEMO_MIRRORS= node "$WEB_DIR/tools/make_torrent.mjs" "$DIST_DIR/tbo" "${SITE_URL:+${SITE_URL}tbo/}" \
+    'Serious Sam: The Second Encounter demo, for the web version' >/dev/null
 fi
 
 # and TFE's base package and demo (SITE_URL: where the site will be, for demo.torrent's web

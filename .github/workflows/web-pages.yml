@@ -48,12 +48,13 @@ jobs:
         ./emsdk install "$EMSDK_VERSION"
         ./emsdk activate "$EMSDK_VERSION"
 
-    # the demo and the patch, from archive.org (checked against web/demo_data.sha256)
+    # the demos and the patch, from archive.org (checked against web/demo_data.sha256 and
+    # web/tse_demo_data.sha256)
     - name: Cache demo download
       uses: actions/cache@v4
       with:
         path: web/build/downloads
-        key: demo-${{ hashFiles('web/demo_data.sha256') }}
+        key: demo-${{ hashFiles('web/demo_data.sha256', 'web/tse_demo_data.sha256') }}
 
     - name: Configure Pages
       id: pages

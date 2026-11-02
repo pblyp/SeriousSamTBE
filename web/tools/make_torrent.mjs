@@ -1,7 +1,7 @@
 // Describes the demo data (a folder named "demo") as a torrent, which the page
 // downloads with WebTorrent from other players and from the web site itself.
 //
-//   [DEMO_MIRRORS=url,...] node make_torrent.mjs <dist dir> [site url]
+//   [DEMO_MIRRORS=url,...] node make_torrent.mjs <dist dir> [site url] [description]
 //
 // DEMO_MIRRORS: other web sites with a copy of the demo folder (each URL is where demo/
 // is in), which the page downloads from before it asks the site (see web/README.md)
@@ -26,9 +26,9 @@ const TRACKERS = [
 // pieces are verified and shared one by one
 const PIECE_LENGTH = 256 * 1024;
 
-const [distDir, siteUrl] = process.argv.slice(2);
+const [distDir, siteUrl, description] = process.argv.slice(2);
 if (!distDir) {
-  console.error('usage: node make_torrent.mjs <dist dir> [site url]');
+  console.error('usage: node make_torrent.mjs <dist dir> [site url] [description]');
   process.exit(1);
 }
 const demoDir = path.join(distDir, 'demo');
@@ -45,7 +45,7 @@ function make(opts) {
   return new Promise((resolve, reject) => {
     createTorrent(demoDir, {
       name: 'demo',
-      comment: 'Serious Sam: The First Encounter demo, for the web version',
+      comment: description || 'Serious Sam: The First Encounter demo, for the web version',
       createdBy: 'SeriousSamClassic web build',
       creationDate: new Date(0),
       pieceLength: PIECE_LENGTH,
