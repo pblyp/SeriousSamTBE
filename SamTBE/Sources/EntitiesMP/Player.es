@@ -1200,8 +1200,10 @@ properties:
  192 FLOAT m_tmSeriousBombFired = -10.0f,  // when the bomb was last fired
 
  193 BOOL m_bInTFEWorld = FALSE,     // set if the keys are from The First Encounter's levels
- 194 FLOAT m_tmTFECreditsEnd = -1.0f,  // when The First Encounter's credits end (started by its last level)
- 195 BOOL m_bSkipTFECredits = FALSE,   // set if the player skipped them
+ 194 FLOAT m_tmTFECreditsEnd = -1.0f,  // when The First Encounter's credits end (started by its last level;
+                                      // 0 if the level stopped them, -1 if they haven't started)
+ 195 BOOL m_bSkipTFEEnding = FALSE,    // set if the player skipped the rest of The First Encounter's ending
+ 196 BOOL m_bTFEHandOff = FALSE,       // set while The First Encounter's end hands over to The Second Encounter
 
 {
   ShellLaunchData ShellLaunchData_array;  // array of data describing flying empty shells
@@ -2261,10 +2263,8 @@ functions:
     }
   }
 
-  // update per-level stats
-  // the action marker where this level's ending starts the credits on the way to the end of the
-  // game (or that end itself), or NULL (for testing The First Encounter's end, dbg_bFirstEncounterEnd)
-  CEntity *FirstEncounterEndMarker(void)
+  // the action marker for the end of the game in this level, or NULL
+  CEntity *EndOfGameMarker(void)
   {
     CEntity *penEnd = NULL;
     {FOREACHINDYNAMICCONTAINER(GetWorld()->wo_cenEntities, CEntity, iten) {
@@ -2273,6 +2273,14 @@ functions:
         penEnd = pen;
       }
     }}
+    return penEnd;
+  }
+
+  // the action marker where this level's ending starts the credits on the way to the end of the
+  // game (or that end itself), or NULL (for testing The First Encounter's end, dbg_bFirstEncounterEnd)
+  CEntity *FirstEncounterEndMarker(void)
+  {
+    CEntity *penEnd = EndOfGameMarker();
     if (penEnd==NULL) {
       CPrintF("dbg_bFirstEncounterEnd: no end of the game in this level\n");
       return NULL;
@@ -2295,6 +2303,46 @@ functions:
     return penCredits!=NULL ? penCredits : penEnd;
   }
 
+  // Fire or Use in The First Encounter's ending (from where its last level records the statistics,
+  // in single player, or once it hands over) skips the rest of it, the outro and the credits, on to
+  // The Second Encounter: TRUE if it does
+  BOOL SkipTFEEnding(void)
+  {
+    if (IsPredictor() || !GetWorld()->wo_bTFE || !(GetFlags()&ENF_ALIVE) || (!m_bEndOfLevel && !m_bTFEHandOff)) {
+      return FALSE;
+    }
+    if (m_bSkipTFEEnding) {
+      return TRUE;
+    }
+    CEntity *penEnd = EndOfGameMarker();
+    if (penEnd==NULL) {
+      return FALSE;
+    }
+    m_bSkipTFEEnding = TRUE;
+    // (straight to the end, see FirstEncounterEnd())
+    if (!m_bTFEHandOff) {
+      EAutoAction eAutoAction;
+      eAutoAction.penFirstMarker = penEnd;
+      SendEvent(eAutoAction);
+    }
+    return TRUE;
+  }
+
+  // what The First Encounter's ending leaves behind, undone before The Second Encounter: its
+  // credits, and what its outro changed (e.g. travelling in a beam: no gravity, moved by itself)
+  void LeaveTFEEnding(void)
+  {
+    _pShell->Execute("sam_iStartCredits=-1;");
+    m_tmTFECreditsEnd = -1.0f;
+    SetPhysicsFlags(GetPhysicsFlags()|EPF_TRANSLATEDBYGRAVITY|EPF_ORIENTEDBYGRAVITY);
+    SetParent(NULL);
+    m_ulFlags &= ~PLF_AUTOMOVEMENTS;
+    m_fAutoSpeed = 0.0f;
+    m_vAutoSpeed = FLOAT3D(0,0,0);
+    m_bEndOfLevel = FALSE;
+    m_penCamera = NULL;
+  }
+
   // The First Encounter's keys have the same numbers as this game's: forget the keys when going
   // from one game's levels to the other's
   void ForgetKeysOfOtherGame(void)
@@ -2303,6 +2351,8 @@ functions:
     if (bTFE!=m_bInTFEWorld) {
       m_ulKeys = 0;
       m_bInTFEWorld = bTFE;
+      m_bSkipTFEEnding = FALSE;
+      m_bTFEHandOff = FALSE;
     }
   }
 
@@ -3867,6 +3917,11 @@ functions:
       }
     }
     
+    // (skipping the rest of The First Encounter's ending: then not for anything else)
+    if ((ulNewButtons&(PLACT_FIRE|PLACT_USE)) && SkipTFEEnding()) {
+      ulNewButtons &= ~(PLACT_FIRE|PLACT_USE);
+    }
+
     // if alive
     if (GetFlags() & ENF_ALIVE) {
       // if not in auto-action mode
@@ -3910,6 +3965,17 @@ functions:
 
     // (for testing The First Encounter's end in single player: its last level's ending, from where
     // its credits start)
+    if (dbg_bFirstEncounterEnd==2 && GetSP()->sp_bSinglePlayer && (GetFlags()&ENF_ALIVE) && m_penActionMarker==NULL) {
+      dbg_bFirstEncounterEnd = FALSE;
+      CEntity *penTrigger = _pNetwork->GetEntityWithName("Trigger: Beam sequence", 0);
+      if (penTrigger==NULL) {
+        penTrigger = _pNetwork->GetEntityWithName("Trigger player marker", 0);
+      }
+      CPrintF("dbg_bFirstEncounterEnd: %s\n", penTrigger!=NULL ? (const char *)penTrigger->GetName() : "no outro in this level");
+      if (penTrigger!=NULL) {
+        SendToTarget(penTrigger, EET_TRIGGER, this);
+      }
+    }
     if (dbg_bFirstEncounterEnd && GetSP()->sp_bSinglePlayer && (GetFlags()&ENF_ALIVE) && m_penActionMarker==NULL) {
       dbg_bFirstEncounterEnd = FALSE;
       CEntity *penStart = FirstEncounterEndMarker();
@@ -4054,10 +4120,6 @@ functions:
   // Auto-actions
   void AutoActions(const CPlayerAction &pa) 
   {
-    // (skipping The First Encounter's credits, see FirstEncounterEnd())
-    if (ulNewButtons&(PLACT_FIRE|PLACT_USE)) {
-      m_bSkipTFECredits = TRUE;
-    }
     // if fire, use or computer is pressed
     if (ulNewButtons&(PLACT_FIRE|PLACT_USE|PLACT_COMPUTER)) {
       if (m_penCamera!=NULL) {
@@ -6058,23 +6120,28 @@ procedures:
     return ERebirth();
   };
 
-  // The First Encounter's end: once its credits have rolled (Fire or Use skips them), The Second
-  // Encounter's first level, with what the players have (as at a level's end)
+  // The First Encounter's end: once its credits have rolled (Fire or Use skips them, and the rest
+  // of the ending before them, see SkipTFEEnding()), The Second Encounter's first level
   FirstEncounterEnd() {
+    // (the level's other auto-actions don't start any more)
+    m_bTFEHandOff = TRUE;
+    CPrintF("The First Encounter's end: %s\n", m_bSkipTFEEnding ? "skipped"
+      : m_tmTFECreditsEnd==0.0f ? "after the level's credits" : "its credits");
     // stop firing
     ((CPlayerWeapons&)*m_penWeapons).SendEvent(EReleaseWeapon());
 
-    // (its last level doesn't roll the credits: The First Encounter showed them in the menu)
-    if (m_tmTFECreditsEnd<_pTimer->CurrentTick()) {
-      _pShell->Execute("sam_iStartCredits=2;");
-      m_tmTFECreditsEnd = _pTimer->CurrentTick()+TFECreditsLength();
+    // the credits, unless skipped: on until they end, if the level started them, and if it didn't
+    // (Karnak's demo), from now
+    if (!m_bSkipTFEEnding) {
+      if (m_tmTFECreditsEnd<0.0f) {
+        _pShell->Execute("sam_iStartCredits=2;");
+        m_tmTFECreditsEnd = _pTimer->CurrentTick()+TFECreditsLength();
+      }
+      while (_pTimer->CurrentTick()<m_tmTFECreditsEnd && !m_bSkipTFEEnding) {
+        autowait(_pTimer->TickQuantum);
+      }
     }
-    m_bSkipTFECredits = FALSE;
-    while (_pTimer->CurrentTick()<m_tmTFECreditsEnd && !m_bSkipTFECredits) {
-      autowait(_pTimer->TickQuantum);
-    }
-    m_tmTFECreditsEnd = -1.0f;
-    _pShell->Execute("sam_iStartCredits=-1;");
+    LeaveTFEEnding();
 
     // as a world link does (the players start at the level's start markers)
     _SwcWorldChange.strGroup = "";
@@ -6703,6 +6770,10 @@ procedures:
       // if stop scroller
       } else if (GetActionMarker()->m_paaAction==PAA_STOPSCROLLER) {
         _pShell->Execute("sam_iStartCredits=-1;");
+        // (The First Encounter's credits are over then, see FirstEncounterEnd())
+        if (GetWorld()->wo_bTFE && m_tmTFECreditsEnd>0.0f) {
+          m_tmTFECreditsEnd = 0.0f;
+        }
 
       // if should run to the marker
       } else if (GetActionMarker()->m_paaAction==PAA_RUN) {
@@ -6953,6 +7024,10 @@ procedures:
         resume;
       }
       on (EAutoAction eAutoAction) : {
+        // (not while The First Encounter's end hands over, see FirstEncounterEnd())
+        if (m_bTFEHandOff) {
+          resume;
+        }
         // remember first marker
         m_penActionMarker = eAutoAction.penFirstMarker;
         // do the actions
