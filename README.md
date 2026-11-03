@@ -31,7 +31,7 @@ It runs in current Chrome, Edge, Firefox and Safari (desktop, Android and iOS).
 
 This is a fork of [SeriousSamClassic](https://github.com/tx00100xt/SeriousSamClassic)
 (the Linux, BSD and macOS port of Croteam's open source Serious Engine). The web version
-is in the `web-port` branch, in its own source tree, `SamTBO` (a copy of `SamTSE` with the web
+is in the `web-port` branch, in its own source tree, `SamTBE` (a copy of `SamTSE` with the web
 version's changes, and what playing The First Encounter's levels takes); for native builds of
 both games, see the original repository.
 
@@ -101,7 +101,7 @@ Encounter's 1.05 patch from archive.org (checked against `web/demo_data.sha256` 
 the engine twice. Browsers with JavaScript Promise Integration get one build, the others an
 Asyncify build.
 
-`SamTBO` builds for the desktop too, like `SamTFE` and `SamTSE` (which stay as they are): run
+`SamTBE` builds for the desktop too, like `SamTFE` and `SamTSE` (which stay as they are): run
 it with The Second Encounter's files in its folder and `+cdpath <The First Encounter's folder>`.
 
 ### Serving it

@@ -1,7 +1,7 @@
 'use strict';
 
 // The game's group files (.gro, zip archives) kept in the browser's storage in pieces, and
-// read from there while the game runs (see Engine/Base/Emscripten/WebArchive.cpp in SamTBO),
+// read from there while the game runs (see Engine/Base/Emscripten/WebArchive.cpp in SamTBE),
 // so they needn't be in memory: the two games' installations are more than some phones let a
 // page have.
 //

@@ -8,7 +8,7 @@ on:
   push:
     branches: [ "main", "web-port" ]
     # (SamTFE: the repository's files that go with The First Encounter's demo)
-    paths: [ "SamTFE/**", "SamTBO/**", "web/**", ".github/workflows/web-pages.yml" ]
+    paths: [ "SamTFE/**", "SamTBE/**", "web/**", ".github/workflows/web-pages.yml" ]
 
 permissions:
   contents: read

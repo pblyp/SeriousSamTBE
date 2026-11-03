@@ -1,7 +1,7 @@
 // Reading the group files (.gro) from the browser's storage as the game needs them (The Both
-// Encounters, see web/shell/archives.js and SamTBO's Engine/Base/Emscripten/WebArchive.cpp):
+// Encounters, see web/shell/archives.js and SamTBE's Engine/Base/Emscripten/WebArchive.cpp):
 // the demo's group files are stored in pieces in IndexedDB, then a small program built from
-// SamTBO's engine (SamTBO/Sources/Tests/ArchiveReaderTest.cpp) reads every file in them
+// SamTBE's engine (SamTBE/Sources/Tests/ArchiveReaderTest.cpp) reads every file in them
 // through the engine's archive reader, in several ways, and checks it against the CRC in the
 // archive. The cache is kept small, so pieces are read again and again. The demo's
 // SE1_10b.gro is in /data, the others in /tfe, the CD path (as The First Encounter's files).

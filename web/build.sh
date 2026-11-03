@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the web version, Serious Sam: The Both Encounters (SamTBO: both games' levels, from the
+# Builds the web version, Serious Sam: The Both Encounters (SamTBE: both games' levels, from the
 # player's two installations or both games' demos), into web/build/dist.
 #
 #   web/build.sh [Release|RelWithDebInfo|Debug] [jspi|asyncify|all]
@@ -10,7 +10,7 @@ set -euo pipefail
 
 WEB_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$WEB_DIR")"
-SRC_DIR="$REPO_DIR/SamTBO/Sources"
+SRC_DIR="$REPO_DIR/SamTBE/Sources"
 BUILD_DIR="$WEB_DIR/build"
 DIST_DIR="$BUILD_DIR/dist"
 BUILD_TYPE="${1:-Release}"
@@ -54,7 +54,7 @@ cp -R "$WEB_DIR/shell/"* "$DIST_DIR/"
 
 # 3. the game data: the repository's files that the engine needs besides the games' own (its
 #    players' or the demos'), and the demos
-"$WEB_DIR/package_base.sh" "$DIST_DIR" SamTBO >/dev/null
+"$WEB_DIR/package_base.sh" "$DIST_DIR" SamTBE >/dev/null
 "$WEB_DIR/package_demo.sh" "$DIST_DIR" >/dev/null
 
 echo "Built into $DIST_DIR"

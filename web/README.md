@@ -5,7 +5,7 @@ Encounter and The Second Encounter as one campaign, from the player's installati
 games (zipped; the files never leave their device), or out of the box with the two games'
 official demos, Karnak then Palenque.
 
-It is `SamTBO`, a copy of `SamTSE` (The Second Encounter's code) with the web version's
+It is `SamTBE`, a copy of `SamTSE` (The Second Encounter's code) with the web version's
 changes and what playing The First Encounter's levels takes. (`SamTFE` has the web version's
 changes too, from before; it isn't built for the web any more.)
 
@@ -87,7 +87,7 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
 - **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations, and
   `web/test/ownfiles.mjs` with the two demos as installations; `web/test/archive-reader.mjs`
   reads every file of The First Encounter's demo's group files from IndexedDB through the
-  engine's reader (a test program, `SamTBO/Sources/Tests/ArchiveReaderTest.cpp`) with a small
+  engine's reader (a test program, `SamTBE/Sources/Tests/ArchiveReaderTest.cpp`) with a small
   cache, in both builds; `web/test/tbo-demos.mjs` plays the demos (Custom Level, Karnak,
   give-all, its end, then Palenque). With real installations,
   `TBO_TSE_ZIP=… TBO_TFE_ZIP=… node web/test/tbo-levels.mjs` starts each level of both games
@@ -102,7 +102,7 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   The page picks one by feature detection.
 - **One binary.** The game, entity and shader libraries that are normally loaded
   with `dlopen()` are linked in. The engine still looks their symbols up by name,
-  in a table generated at build time (`SamTBO/Sources/cmake/gen_static_symbols.cmake`,
+  in a table generated at build time (`SamTBE/Sources/cmake/gen_static_symbols.cmake`,
   `Engine/Base/Emscripten/StaticDynamicLoader.cpp`).
 - **Rendering.** The engine's OpenGL 1.x code runs unchanged: every `pgl*` function
   it calls is emulated on WebGL 2 by `Engine/Graphics/Emscripten/GL1Emulation.cpp`
