@@ -198,6 +198,31 @@
       await this.remove();
       return true;
     },
+    // delete the kept files that the page doesn't take any more (see isKept(): later versions of the
+    // page take less of an installation): { files, bytes } deleted
+    async prune() {
+      const meta = await this.stored();
+      if (!meta) return { files: 0, bytes: 0 };
+      const gone = meta.files.filter(({ path: key }) => {
+        const { path, root } = fromStoreKey(key);
+        return !isKept(path, Game.installs.find((install) => install.root === root));
+      });
+      if (gone.length === 0) return { files: 0, bytes: 0 };
+      const db = await this.open();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(['files', 'chunks', 'meta'], 'readwrite');
+        for (const { path: key, chunked } of gone) {
+          if (chunked) tx.objectStore('chunks').delete(IDBKeyRange.bound([key, 0], [key, Infinity]));
+          else tx.objectStore('files').delete(key);
+        }
+        const files = meta.files.filter((file) => !gone.includes(file));
+        const bytes = gone.reduce((sum, { size }) => sum - size, meta.bytes);
+        tx.objectStore('meta').put({ ...meta, files, bytes }, 'meta');
+        tx.oncomplete = resolve;
+        tx.onerror = tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+      });
+      return { files: gone.length, bytes: gone.reduce((sum, { size }) => sum + size, 0) };
+    },
     async read(path) {
       const record = await transaction(await this.open(), 'files', 'readonly', (store) => store.get(path));
       if (!record) throw new Error(`${path} is missing from the game files kept in this browser.`);
@@ -342,9 +367,15 @@
     const lower = path.toLowerCase();
     return !/^(bin|tools\.win32|temp|savegame|players|help)\//.test(lower)
       && !/\.(exe|dll|ex_|cab|hdr|bin|log)$/.test(lower)
+      // (what the store or the installer put next to the game)
+      && !/^(goggame-[^/]*|[^/]*\.(ico|vdf|htm|html|url)|(license|eula)[^/]*)$/.test(lower)
       // the engine needs this repository's video settings
       && !lower.startsWith('scripts/glsettings/');
   }
+
+  // what the page takes of an installation's (or a demo's) files: what the web version needs, and
+  // not what the game doesn't read of that installation (see skip in config.js)
+  const isKept = (path, install) => isNeeded(path) && !(install.skip && install.skip.test(path));
 
   // what macOS adds to archives and folders
   const isMacJunk = (path) => /(^|\/)(__MACOSX\/|\._|\.DS_Store$)/.test(path);
@@ -385,7 +416,7 @@
       const [install, dir] = found;
       const path = entry.path.slice(dir.length);
       // (and not what the version doesn't read from that installation, see config.js)
-      if (isNeeded(path) && !(install.skip && install.skip.test(path))) {
+      if (isKept(path, install)) {
         files.push({ ...entry, path, root: install.root, storePrefix: install.storePrefix });
       }
     }
@@ -840,7 +871,7 @@
           throw e;
         });
         for (const file of files) {
-          if (isNeeded(file.path) && !(demo.skip && demo.skip.test(file.path))) {
+          if (isKept(file.path, demo)) {
             dataFiles.push({ ...file, root: demo.root });
           }
         }
@@ -912,6 +943,10 @@
     try {
       if (await OwnFiles.removeUnfinished()) {
         log('Game files that the game never started with were deleted from this browser');
+      }
+      const pruned = await OwnFiles.prune();
+      if (pruned.files > 0) {
+        log(`Deleted ${pruned.files} game files the game doesn't use (${(pruned.bytes / 1048576).toFixed(1)} MB)`);
       }
       meta = await OwnFiles.stored();
     } catch (e) {

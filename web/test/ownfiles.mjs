@@ -88,7 +88,7 @@ function checkOwnExport(file, kept) {
     if (!fs.existsSync(got) || !fs.readFileSync(got).equals(fs.readFileSync(path.join(from, p)))) return `${folder}/${p} differs`;
   }
   const names = execFileSync('unzip', ['-Z1', file], { encoding: 'utf8' }).trim().split('\n');
-  const leftOut = names.filter((n) => /^The First Encounter\/(Bin|Help|Temp|SaveGame|Players|Scripts|Controls|Data|Demos)\//i.test(n));
+  const leftOut = names.filter((n) => /^The First Encounter\/((Bin|Help|Temp|SaveGame|Players|Scripts|Controls|Data|Demos|VirtualTrees)\/|SE1_10b\.gro$|1_00_ExtraTools\.gro$)/i.test(n));
   if (leftOut.length) return `has ${leftOut[0]}, which isn't kept`;
   return names.length === kept.length ? '' : `${names.length} files in it, ${kept.length} kept`;
 }

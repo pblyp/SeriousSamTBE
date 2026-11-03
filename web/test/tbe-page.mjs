@@ -42,11 +42,19 @@ const tseDir = install('Serious Sam Classic The Second Encounter', {
   'Bin/SeriousSam.exe': 'not needed', 'Help/Readme.txt': 'not needed either',
   // (TBE's own scripts are used, and mods aren't offered)
   'Scripts/Game_startup.ini': 'sam_strFirstLevel = "Levels\\\\LevelsMP\\\\1_0_InTheLastEpisode.wld";', 'Mods/Warped/Warped3.gro': 'a mod',
+  // (what the game doesn't read: recorded demos, translations, the editor's data, the store's files)
+  'Demos/auto-demo0001.dem': 'not read', 'Locales/eng/Mods/SecondEncounter.des': 'not read',
+  'SE1_00_ExtraTools.gro': 'the editor\'s', '1_07_tools.gro': 'the editor\'s', 'VirtualTrees/Basic.vrt': 'the editor\'s',
+  'Worlds/TemplatesSE/Statues.wld': 'the editor\'s', 'goggame-1207658877.info': 'the store\'s', 'ReadMe.htm': 'the store\'s',
+  'license.txt': 'the store\'s',
 });
 const tfeDir = install('Serious Sam Classic The First Encounter', {
   '1_00c.gro': 'the first encounter', '1_00_music.gro': 'its music', 'Levels/01_Hatshepsut.wld': 'a loose level',
   // (only its game data is read)
   'Scripts/Menu/Options.cfg': 'not read', 'Controls/00-Default.ctl': 'not read', 'Demos/auto-demo0001.dem': 'not read',
+  // (its 1.10 engine data, which The Second Encounter's has, its intro flyover, the editor's data, the store's files)
+  'SE1_10.gro': 'never wins', 'Levels/Intro.wld': 'not played', '1_00_ExtraTools.gro': 'the editor\'s',
+  'VirtualTrees/Basic.vrt': 'the editor\'s', 'installscript.vdf': 'the store\'s',
 });
 const zip = (name, cwd, ...what) => {
   const out = path.join(tmp, name);
@@ -125,7 +133,11 @@ const files = await page.evaluate(() => {
     // (and the repository's files, from the base package)
     base: exists('/data/SE1_10b.gro') && exists('/data/ModEXT.txt'),
     notNeeded: exists('/data/Bin/SeriousSam.exe') || exists('/data/Help/Readme.txt') || exists('/data/Mods/Warped/Warped3.gro')
-      || exists('/tfe/Scripts/Menu/Options.cfg') || exists('/tfe/Controls/00-Default.ctl') || exists('/tfe/Demos/auto-demo0001.dem'),
+      || exists('/tfe/Scripts/Menu/Options.cfg') || exists('/tfe/Controls/00-Default.ctl') || exists('/tfe/Demos/auto-demo0001.dem')
+      || ['/data/Demos/auto-demo0001.dem', '/data/Locales/eng/Mods/SecondEncounter.des', '/data/SE1_00_ExtraTools.gro',
+        '/data/1_07_tools.gro', '/data/VirtualTrees/Basic.vrt', '/data/Worlds/TemplatesSE/Statues.wld',
+        '/data/goggame-1207658877.info', '/data/ReadMe.htm', '/data/license.txt', '/tfe/SE1_10.gro', '/tfe/Levels/Intro.wld',
+        '/tfe/1_00_ExtraTools.gro', '/tfe/VirtualTrees/Basic.vrt', '/tfe/installscript.vdf'].some(exists),
     // (TBE's own startup script, not the installation's, which would start The Second Encounter)
     ownScripts: !new TextDecoder().decode(Module.FS.readFile('/data/Scripts/Game_startup.ini')).includes('1_0_InTheLastEpisode'),
     tfeNotInData: exists('/data/1_00c.gro'),
@@ -153,6 +165,7 @@ const kept = await storedKeys(page, 'files');
 const pieces = await storedKeys(page, 'chunks');
 results[`the files are kept in the page's store (${kept.join(', ')}; in pieces: ${pieces.join(', ')})`] =
   kept.includes('tfe/Levels/01_Hatshepsut.wld') && !kept.some((k) => k.endsWith('.gro'))
+  && kept.length === 1 && pieces.length === 4
   && pieces.includes('SE1_00.gro#0') && pieces.includes('tfe/1_00c.gro#0')
   && !(await databases(page)).includes('sam-own-files');
 
@@ -175,9 +188,13 @@ await page.evaluate(async () => {
   const db = await new Promise((resolve) => { const r = indexedDB.open('tbe-own-files'); r.onsuccess = () => resolve(r.result); });
   const files = ['SE1_00.gro', 'SE1_00_Levels.gro', 'tfe/1_00c.gro', 'tfe/1_00_music.gro']
     .map((path) => ({ path, size: GameArchives.size(GameArchives.open(`/${path.startsWith('tfe/') ? '' : 'data/'}${path}`)), chunked: true }))
-    .concat([{ path: 'tfe/Levels/01_Hatshepsut.wld', size: 13 }]);
+    .concat([{ path: 'tfe/Levels/01_Hatshepsut.wld', size: 13 }])
+    // (and two files that earlier versions of the page kept, which it doesn't take any more)
+    .concat([{ path: 'tfe/SE1_10.gro', size: 3, chunked: true }, { path: 'goggame-1207658877.info', size: 3 }]);
   await new Promise((resolve) => {
-    const tx = db.transaction('meta', 'readwrite');
+    const tx = db.transaction(['meta', 'chunks', 'files'], 'readwrite');
+    tx.objectStore('chunks').put(new Uint8Array([1, 2, 3]).buffer, ['tfe/SE1_10.gro', 0]);
+    tx.objectStore('files').put({ path: 'goggame-1207658877.info', data: new Uint8Array([1, 2, 3]).buffer });
     tx.objectStore('meta').put({ files, bytes: files.reduce((n, f) => n + f.size, 0), savedAt: Date.now() }, 'meta');
     tx.oncomplete = resolve;
   });
@@ -187,6 +204,19 @@ const again = await context.newPage();
 again.on('pageerror', (e) => errors.push(e.stack || e.message));
 await again.goto(`${server.url}/index.html`);
 await again.waitForSelector('#play-own:not([hidden])', { timeout: 10000 });
+// (what the page doesn't take any more is deleted from what it keeps)
+const prunedLog = (await again.evaluate(() => window.engineLog)).find((l) => l.startsWith('Deleted ')) || 'nothing deleted';
+const afterPrune = { files: await storedKeys(again, 'files'), pieces: await storedKeys(again, 'chunks') };
+const afterMeta = await again.evaluate(() => new Promise((resolve) => {
+  const r = indexedDB.open('tbe-own-files');
+  r.onsuccess = () => {
+    const g = r.result.transaction('meta').objectStore('meta').get('meta');
+    g.onsuccess = () => { r.result.close(); resolve(g.result.files.map(({ path }) => path)); };
+  };
+}));
+results[`what the page doesn't take any more is deleted from what it kept (${prunedLog})`] =
+  /^Deleted 2 game files/.test(prunedLog) && afterMeta.length === 5 && !afterMeta.some((p) => /SE1_10|goggame/.test(p))
+  && !afterPrune.pieces.some((k) => k.startsWith('tfe/SE1_10.gro')) && !afterPrune.files.includes('goggame-1207658877.info');
 await again.click('#play-own');
 await again.waitForSelector('#start:not([hidden])', { timeout: 120000 });
 await again.click('#start');

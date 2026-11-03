@@ -62,7 +62,15 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   Encounter's to `/tfe`, which the engine gets as its second data folder (`+cdpath /tfe/`):
   where both games have a file with the same name, The Second Encounter's is used; The First
   Encounter's levels, textures and music come from `/tfe`. What the game doesn't read isn't
-  taken (`installs` in `shell/config.js`).
+  taken (`installs` in `shell/config.js`, `isNeeded()` in `shell/main.js`): the programs, help,
+  saved games, the installations' own scripts and mods, what the store or the installer put next
+  to the game, the editor's data (`*ExtraTools.gro`, `1_07_tools.gro`, `VirtualTrees/`,
+  `Worlds/`), The Second Encounter's translations (`Locales/`, which the engine doesn't read)
+  and recorded demos (the menu then plays only the intro flyover when idle), and of The First
+  Encounter's, its intro flyover and its 1.10 engine data (`SE1_10.gro`: files with higher
+  rank, The Second Encounter's and the base package's, have every one of its files anything
+  refers to; checked against both games' levels, classes, model configurations, scripts and the
+  sources). What earlier versions of the page kept of these is deleted on the next visit.
 - **The First Encounter's levels** are recognized by where they come from, and converted
   when loaded (their keys, weapons given at the start, lighting fixes, map).
 - **The demos.** *Play the demos* downloads The First Encounter's demo (`demo/tfe/`) and The
