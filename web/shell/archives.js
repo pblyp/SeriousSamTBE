@@ -196,6 +196,23 @@
     }
   }
 
+  // the pieces of a file kept under name in the database dbName, in order (Uint8Arrays), a few
+  // at a time: the pieces there are (the reader checks that they are all of the file)
+  async function* pieces(dbName, name, size) {
+    const BATCH = 8;
+    const db = await database(dbName);
+    for (let first = 0; first * CHUNK_SIZE < size; first += BATCH) {
+      const batch = await new Promise((resolve, reject) => {
+        const tx = db.transaction('chunks', 'readonly');
+        const request = tx.objectStore('chunks').getAll(IDBKeyRange.bound([name, first], [name, first + BATCH - 1]));
+        tx.oncomplete = () => resolve(request.result);
+        tx.onerror = tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+      });
+      for (const piece of batch) yield new Uint8Array(piece);
+      if (batch.length < BATCH) return;
+    }
+  }
+
   // an archive as a Blob would be (size, slice(start, end).arrayBuffer()), to list it with
   // ZipReader (for tests)
   function asBlob(id) {
@@ -216,6 +233,6 @@
     };
   }
 
-  window.GameArchives = { CHUNK_SIZE, store, register, unregister, open, size, readSync, fetch, stats, asBlob,
+  window.GameArchives = { CHUNK_SIZE, store, register, unregister, open, size, readSync, fetch, stats, asBlob, pieces,
     cachedBytes: () => cacheBytes, setCacheLimit: (bytes) => { cacheLimit = Math.max(bytes, 16 << 20); } };
 })();

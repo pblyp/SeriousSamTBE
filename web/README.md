@@ -118,6 +118,15 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   archives too), so a damaged or cut short one is named before the game starts.
   The player's files are also kept in IndexedDB (`tbe-own-files`), and counted as kept
   only once the game has started with them; on later visits *Play my game files* uses them.
+- **Exporting.** *Export my game files…* and *Export the demos…* on the start page save what is
+  kept as a .zip (`tbe-game-files.zip`, `tbe-demos.zip`), each installation or demo in a folder of
+  its name, byte for byte as kept: the player's files without what the page leaves out of an
+  installation (programs, help, and the scripts and mods it doesn't read), the demos with all of
+  their files. *Use my game files…* takes either back. `ZipWriter` in `shell/zip.js` stores the
+  files as they are (group files are zip archives already) and reads each twice, for its CRC first,
+  so the headers have everything in them. Where the browser has `showSaveFilePicker` (desktop
+  Chromium) the archive is written to the picked file as it goes; elsewhere it is put together in a
+  Blob and downloaded. The demos are exported only once they are all downloaded.
 - **When the game can't start**, the page says what happened (with the engine's message
   under "What the game said") and what to try, with *Start over*, *Clear assets* and
   *Clear my data* (both also on the start page). Each deletes, after asking, only its part
@@ -282,12 +291,12 @@ cd web/test && npm install && npx playwright install chromium firefox webkit
 npm test              # all of the following
 node smoke.mjs        # plays Karnak in Chromium (both builds), Firefox and WebKit
 node persistence.mjs  # settings survive reloading the page
-node ownfiles.mjs     # "Use my game files" (the demos as installations): zips made in several ways, broken game files, clearing stored data (--browser webkit)
+node ownfiles.mjs     # "Use my game files" (the demos as installations): zips made in several ways, broken game files, exporting the kept files, clearing stored data (--browser webkit)
 node touch.mjs        # touch screen controls (--size 844x390 for a phone)
 node gamepad.mjs      # gamepads (a stand-in for the Gamepad API) and aim assist
 node mobile.mjs       # phone players' path on an emulated Android phone and iPhone
 node pwa.mjs          # installable app: manifest, service worker, starting offline
-node demo-download.mjs  # the demos' download: from the site, from IndexedDB, on after it stopped, from mirrors
+node demo-download.mjs  # the demos' download: from the site, from IndexedDB, on after it stopped, from mirrors; exporting them
 node netplay.mjs      # network games: hosting, joining by code, leaving, a site without a hub
 node netplay-browsers.mjs  # network games between WebKit, Firefox and Chromium
 node tbe-page.mjs     # the page with made-up installations of both games

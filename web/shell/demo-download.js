@@ -254,5 +254,25 @@
     }));
   }
 
-  window.DemoDownload = { download };
+  // the demo as it is kept in this browser, if all of it is (the site's version of it):
+  // { db, files: [{ path, size }] } (its pieces are in db's 'chunks' store), else null
+  async function kept({ base, prefix = DB_PREFIX }) {
+    const info = await (await fetchOk(`${base}demo-files.json`)).json();
+    const dbName = prefix + info.version;
+    // (without creating the database just to look)
+    if (!indexedDB.databases || !(await indexedDB.databases()).some(({ name }) => name === dbName)) {
+      return null;
+    }
+    const db = await openDatabase(dbName);
+    try {
+      for (const file of info.files) {
+        if (await keptBytes(db, file.path) < file.size) return null;
+      }
+    } finally {
+      db.close();
+    }
+    return { db: dbName, files: info.files.map(({ path, size }) => ({ path, size })) };
+  }
+
+  window.DemoDownload = { download, kept };
 })();

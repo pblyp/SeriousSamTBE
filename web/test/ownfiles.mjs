@@ -2,9 +2,9 @@
 // installations (each game's demo counts as its installation): checks that the page unpacks
 // zips made in different ways exactly, refuses what isn't a zip, starts the game from the
 // two zips (The First Encounter's made like macOS Finder's "Compress", with __MACOSX entries),
-// keeps the files for the next visit ("Play my game files"), explains what is wrong with broken
-// game files (and doesn't keep those), and clears the assets and the player's data separately
-// when asked to.
+// keeps the files for the next visit ("Play my game files"), exports the kept files as a .zip
+// (which can be picked again), explains what is wrong with broken game files (and doesn't keep
+// those), and clears the assets and the player's data separately when asked to.
 //
 //   node ownfiles.mjs [--browser chromium|webkit|firefox] [screenshot]
 
@@ -65,6 +65,33 @@ const expected = new Map();
     else if (name !== '.DS_Store') expected.set(rel, crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex'));
   }
 })(gameDir, '');
+
+// the exported .zip: whole (its CRCs), with exactly the kept files (kept: their names in the page's
+// store, The First Encounter's under tfe/), each in its installation's folder and the same as the
+// file it came from: what is wrong, or ''
+function checkOwnExport(file, kept) {
+  try {
+    execFileSync('unzip', ['-tq', file], { stdio: 'pipe' });
+  } catch (e) {
+    return `unzip -t: ${String(e.stdout || e.message).trim().split('\n').pop()}`;
+  }
+  const dir = path.join(tmp, 'exported');
+  execFileSync('unzip', ['-q', file, '-d', dir]);
+  if (process.platform === 'darwin') {
+    // (as macOS's Archive Utility unpacks it)
+    execFileSync('ditto', ['-x', '-k', file, path.join(tmp, 'exported-ditto')]);
+  }
+  for (const key of kept) {
+    const [folder, from, p] = key.startsWith('tfe/') ? ['The First Encounter', gameDir, key.slice(4)]
+      : ['The Second Encounter', tseDir, key];
+    const got = path.join(dir, folder, p);
+    if (!fs.existsSync(got) || !fs.readFileSync(got).equals(fs.readFileSync(path.join(from, p)))) return `${folder}/${p} differs`;
+  }
+  const names = execFileSync('unzip', ['-Z1', file], { encoding: 'utf8' }).trim().split('\n');
+  const leftOut = names.filter((n) => /^The First Encounter\/(Bin|Help|Temp|SaveGame|Players|Scripts|Controls|Data|Demos)\//i.test(n));
+  if (leftOut.length) return `has ${leftOut[0]}, which isn't kept`;
+  return names.length === kept.length ? '' : `${names.length} files in it, ${kept.length} kept`;
+}
 
 const server = await serve();
 const browser = await { chromium, webkit, firefox }[browserName].launch({ headless: true,
@@ -139,6 +166,66 @@ if (offered) {
   results['the game starts from the kept files'] = log2.some((l) => l.includes('Copied')) && !log2.some((l) => l.includes('FatalError'));
 }
 
+// the kept files exported as a .zip: downloaded (as a browser does that can't write a file as it
+// goes), and written to a picked file (where the browser can), each installation's in a folder of
+// its name, exactly as they are kept
+const exported = path.join(tmp, 'exported.zip');
+await page.reload();
+await page.waitForSelector('#export-own:not([hidden])', { timeout: 10000 }).catch(() => {});
+if (await page.isVisible('#export-own')) {
+  const kept = await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('tbe-own-files');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const get = open.result.transaction('meta').objectStore('meta').get('meta');
+      get.onsuccess = () => { open.result.close(); resolve(get.result.files.map(({ path: p }) => p)); };
+    };
+  }));
+  await page.evaluate(() => { window.showSaveFilePicker = undefined; });
+  const download = page.waitForEvent('download', { timeout: 120000 }).catch(() => null);
+  await page.click('#export-own');
+  await page.waitForFunction(() => /^(Exported|Exporting .* failed)/.test(document.getElementById('purge-status').textContent),
+    null, { timeout: 120000 }).catch(() => {});
+  const status = await page.textContent('#purge-status');
+  let wrong = 'no .zip';
+  if (status.startsWith('Exported')) {
+    await (await download).saveAs(exported);
+    wrong = checkOwnExport(exported, kept);
+  }
+  results[`the kept files can be exported, exactly (${status}${wrong ? `; ${wrong}` : ''})`] = !wrong;
+  // (the same files, written to a picked file as they go)
+  if (browserName === 'chromium' && !wrong) {
+    await page.evaluate(() => {
+      window.picked = [];
+      window.showSaveFilePicker = async ({ suggestedName }) => ({ createWritable: async () => ({
+        write: async (bytes) => { window.picked.push(bytes.slice()); },
+        close: async () => { window.pickedName = suggestedName; },
+        abort: async () => {},
+      }) });
+    });
+    await page.evaluate(() => { document.getElementById('purge-status').textContent = ''; });
+    await page.click('#export-own');
+    await page.waitForFunction(() => /^(Exported|Exporting .* failed)/.test(document.getElementById('purge-status').textContent),
+      null, { timeout: 120000 }).catch(() => {});
+    await page.evaluate(() => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.id = 'zip-check';
+      input.hidden = true;
+      document.body.append(input);
+    });
+    await page.setInputFiles('#zip-check', exported);
+    const same = await page.evaluate(async () => {
+      const listing = async (file) => (await ZipReader.list(file)).map(({ path: p, size, crc }) => `${p} ${size} ${crc}`).join('\n');
+      return window.pickedName === 'tbe-game-files.zip'
+        && await listing(new Blob(window.picked)) === await listing(document.getElementById('zip-check').files[0]);
+    });
+    results[`into a picked file, the same (${await page.textContent('#purge-status')})`] = same;
+  }
+} else {
+  results['the kept files can be exported'] = false;
+}
+
 // clearing the assets keeps the player's data, and the other way round
 await page.reload();
 await page.waitForSelector('#play-own:not([hidden])', { timeout: 10000 }).catch(() => {});
@@ -163,6 +250,21 @@ after = await pageDatabases(page);
 results[`clearing my data removes settings and saved games and resets the options (${before} -> ${after || 'none'})`] =
   before.includes('/tbe-user') && !after.includes('/tbe-user')
   && await page.evaluate(() => localStorage.getItem('tbe.touchControls') === null && document.getElementById('touch-mode').value === 'auto');
+
+// the exported .zip, picked again: the game starts from it
+if (fs.existsSync(exported)) {
+  await page.reload();
+  await page.setInputFiles('#game-zip', exported);
+  await page.waitForSelector('#start:not([hidden])', { timeout: 120000 }).catch(() => {});
+  if (await page.isVisible('#start')) {
+    await page.click('#start');
+    await page.waitForFunction(() => window.engineLog.some((l) => l.includes('Demo data detected')), null, { timeout: 60000 })
+      .catch(() => {});
+  }
+  const log3 = await page.evaluate(() => window.engineLog);
+  results['the exported .zip can be picked again, and the game starts from it'] = log3.some((l) => l.includes('Demo data detected'))
+    && !log3.some((l) => l.includes('FatalError'));
+}
 
 // broken game files: the page says what is wrong and what to do
 async function failWith(zips) {

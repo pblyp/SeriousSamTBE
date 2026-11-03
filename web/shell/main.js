@@ -38,6 +38,8 @@
   const zipInput = document.getElementById('game-zip');
   const ownFilesLabel = document.getElementById('own-files');
   const ownFilesNote = document.getElementById('own-files-note');
+  const exportOwnButton = document.getElementById('export-own');
+  const exportDemosButton = document.getElementById('export-demos');
   const startButton = document.getElementById('start');
   const fullscreenCheckbox = document.getElementById('fullscreen');
   const logEl = document.getElementById('log');
@@ -922,8 +924,87 @@
     if (meta) {
       playOwnNote.textContent = `Kept in this browser · about ${Math.max(1, Math.round(meta.bytes / 1048576))} MB`;
     }
+    exportOwnButton.hidden = !meta;
+    // (the demos once they are downloaded, see exportDemos())
+    let demosKept = false;
+    try {
+      const names = indexedDB.databases ? (await indexedDB.databases()).map(({ name }) => name || '') : [];
+      demosKept = Game.demos.every(({ prefix }) => names.some((name) => name.startsWith(prefix)));
+    } catch (e) {
+      // (no IndexedDB)
+    }
+    exportDemosButton.hidden = !demosKept;
   }
   showStoredFiles();
+
+  // ---------------------------------------------------------------- exporting
+
+  // what is kept in this browser, as a .zip for the player to keep (and to pick again with "Use
+  // my game files"): their game files as they were taken from their installations, or the
+  // demos as they were downloaded, each installation (demo) in a folder of its name
+  const MB = (bytes) => `${Math.max(1, Math.round(bytes / 1048576)).toLocaleString('en-US')} MB`;
+  let exporting = false;
+
+  async function exportFiles(what, fileName, entries) {
+    if (exporting) return;
+    exporting = true;
+    exportOwnButton.disabled = exportDemosButton.disabled = true;
+    const status = document.getElementById('purge-status');
+    try {
+      const list = await entries();
+      if (!list) {
+        status.textContent = 'The demos aren\'t downloaded yet: play them once first.';
+        return;
+      }
+      let shown = -1;
+      const bytes = await ZipWriter.save(fileName, list, (fraction) => {
+        const percent = Math.floor(fraction * 100);
+        if (percent !== shown) status.textContent = `Exporting ${what}… ${shown = percent}%`;
+      });
+      status.textContent = bytes ? `Exported ${what} (${MB(bytes)}).` : '';
+      if (bytes) log(`Exported ${what} as ${fileName} (${list.length} files, ${bytes} bytes)`);
+    } catch (e) {
+      status.textContent = `Exporting ${what} failed: ${e && e.message}`;
+      log(`Exporting ${what} failed: ${e && e.message}`);
+    } finally {
+      exporting = false;
+      exportOwnButton.disabled = exportDemosButton.disabled = false;
+    }
+  }
+
+  // the player's game files kept here, as the game started with them (without what the web
+  // version leaves out of an installation, see isNeeded())
+  function exportOwnFiles() {
+    return exportFiles('your game files', 'tbe-game-files.zip', async () => {
+      const meta = await OwnFiles.stored();
+      if (!meta) throw new Error('No game files are kept in this browser.');
+      return meta.files.map(({ path: key, size, chunked }) => {
+        const { path, root } = fromStoreKey(key);
+        const install = Game.installs.find((i) => i.root === root);
+        return {
+          path: `${install.name}/${path}`,
+          size,
+          pieces: chunked ? () => GameArchives.pieces(OWN_FILES_DB, key, size)
+            : async function* () { yield new Uint8Array(await OwnFiles.read(key)); },
+        };
+      });
+    });
+  }
+
+  // the demos kept here, all of their files as the site has them
+  function exportDemos() {
+    return exportFiles('the demos', 'tbe-demos.zip', async () => {
+      const entries = [];
+      for (const demo of Game.demos) {
+        const kept = await DemoDownload.kept({ base: `demo/${demo.folder}/`, prefix: demo.prefix });
+        if (!kept) return null;
+        for (const { path, size } of kept.files) {
+          entries.push({ path: `${demo.name}/${path}`, size, pieces: () => GameArchives.pieces(kept.db, path, size) });
+        }
+      }
+      return entries;
+    });
+  }
 
   // what earlier versions of the page kept under other names (see config.js): the big things go
   async function deleteOldData() {
@@ -951,6 +1032,8 @@
     if (await clearMyData()) location.reload();
   });
   const purgeStatus = document.getElementById('purge-status');
+  exportOwnButton.addEventListener('click', exportOwnFiles);
+  exportDemosButton.addEventListener('click', exportDemos);
   document.getElementById('clear-assets').addEventListener('click', async () => {
     if (await clearAssets()) {
       await showStoredFiles();

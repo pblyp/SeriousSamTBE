@@ -6,11 +6,14 @@
 //  3. from a mirror (another site with a copy of demo/, ?mirror=), not from the site
 //  4. from the site, when the mirror doesn't have the files
 //  5. from an http address that isn't localhost (like a computer on the local network)
+// and that the kept demos can be exported as a .zip ("Export the demos…"), all of their files as
+// the site has them, but not before they are all downloaded
 //
 //   node demo-download.mjs
 
 import { chromium } from 'playwright';
 import { serve } from './server.mjs';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +24,7 @@ const server = await serve();
 const mirror = await serve(0, undefined, '127.0.0.1', { cors: true });
 const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sam-mirror-'));
 const brokenMirror = await serve(0, emptyDir, '127.0.0.1', { cors: true });
+const exportDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sam-export-'));
 
 // (sam.test: an address that isn't localhost, so not a secure context)
 const browser = await chromium.launch({ headless: true, args: ['--use-angle=metal', '--host-resolver-rules=MAP sam.test 127.0.0.1'] });
@@ -73,6 +77,54 @@ async function openPage(query, { context = null, cutShort = false, origin = serv
   return page;
 }
 
+// "Export the demos…" on the start page of a context with the demos kept (downloaded, as a browser
+// does that can't write a file as it goes): the .zip's file, or the page's status if there isn't one
+async function exportDemos(context, file) {
+  const page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(e.stack || e.message));
+  await page.goto(`${server.url}/index.html`);
+  await page.waitForSelector('#export-demos:not([hidden])', { timeout: 10000 }).catch(() => {});
+  if (!await page.isVisible('#export-demos')) {
+    await page.close();
+    return { status: 'not offered' };
+  }
+  await page.evaluate(() => { window.showSaveFilePicker = undefined; });
+  const download = page.waitForEvent('download', { timeout: 120000 }).catch(() => null);
+  await page.click('#export-demos');
+  await page.waitForFunction(() => /^(Exported|Exporting .* failed|The demos aren't)/
+    .test(document.getElementById('purge-status').textContent), null, { timeout: 120000 }).catch(() => {});
+  const status = await page.textContent('#purge-status');
+  if (status.startsWith('Exported')) await (await download).saveAs(file);
+  await page.close();
+  return { status, file: status.startsWith('Exported') ? file : null };
+}
+
+// the exported .zip: whole (its CRCs), with each demo's files in a folder of its name, exactly as
+// the site has them: what is wrong, or ''
+function checkDemoExport(file) {
+  try {
+    execFileSync('unzip', ['-tq', file], { stdio: 'pipe' });
+  } catch (e) {
+    return `unzip -t: ${String(e.stdout || e.message).trim().split('\n').pop()}`;
+  }
+  const dir = path.join(exportDir, 'unpacked');
+  fs.rmSync(dir, { recursive: true, force: true });
+  execFileSync('unzip', ['-q', file, '-d', dir]);
+  const names = { tfe: 'The First Encounter\'s demo', tse: 'The Second Encounter\'s demo' };
+  let count = 0;
+  for (const demo of demos) {
+    for (const { path: p } of demo.files) {
+      const exported = path.join(dir, names[demo.folder], p);
+      if (!fs.existsSync(exported) || !fs.readFileSync(exported).equals(fs.readFileSync(path.join(DIST, 'demo', demo.folder, p)))) {
+        return `${names[demo.folder]}/${p} differs`;
+      }
+      count++;
+    }
+  }
+  const all = execFileSync('unzip', ['-Z1', file], { encoding: 'utf8' }).trim().split('\n');
+  return all.length === count ? '' : `${all.length} files in it, ${count} expected`;
+}
+
 const engineLog = (page) => page.evaluate(() => window.engineLog);
 const waitForLog = (page, text, timeout = 180000) =>
   page.waitForFunction((t) => window.engineLog.some((l) => l.includes(t)), text, { timeout });
@@ -109,6 +161,9 @@ const show = (d) => (d ? `${d[0]} MB, ${d[1]} MB from the site, ${d[2]} MB from 
     && isWholeDemo(firstDownload[0]) && firstDownload[1] === firstDownload[0] && firstRequests > 0;
   results[`next visit downloads nothing (${show(secondDownload)}, ${page.demoRequests.length} requests)`] = second
     && secondDownload && secondDownload[0] === 0 && page.demoRequests.length === 0;
+  const { status, file } = await exportDemos(page.context(), path.join(exportDir, 'tbe-demos.zip'));
+  const wrong = file ? checkDemoExport(file) : 'no .zip';
+  results[`the demos can be exported, all of their files exactly (${status}${wrong ? `; ${wrong}` : ''})`] = !wrong;
   await page.context().close();
 }
 
@@ -119,6 +174,8 @@ const show = (d) => (d ? `${d[0]} MB, ${d[1]} MB from the site, ${d[2]} MB from 
   const failed = await first.isVisible('#error');
   const context = first.context();
   await first.close();
+  const { status } = await exportDemos(context, path.join(exportDir, 'cut-short.zip'));
+  results[`the demos can't be exported before they are all downloaded (${status})`] = /aren't downloaded yet/.test(status);
   const page = await openPage('', { context });
   const whole = await ready(page);
   const download = await downloaded(page);
@@ -179,6 +236,7 @@ server.close();
 mirror.close();
 brokenMirror.close();
 fs.rmSync(emptyDir, { recursive: true, force: true });
+fs.rmSync(exportDir, { recursive: true, force: true });
 
 results['no page errors'] = errors.length === 0;
 let failed = false;
