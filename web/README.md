@@ -29,6 +29,16 @@ against `demo_data.sha256` and `tse_demo_data.sha256` (`fetch_demo_data.sh`,
 `tools/make_demo_list.mjs`). It also packages the repository's game files that the engine
 needs besides the games' own (`package_base.sh`, `base-data.data`).
 
+The demos go into the site as the page takes them, and smaller (`tools/pack_demo.py`, staged
+in `web/build/demo-staged/`): The First Encounter's without TBE's own scripts and settings, its
+recorded demos, its intro flyover, the 1.10 engine data and the editor's data; and its group
+files without the files that The Second Encounter's demo or the base package have too (theirs
+rank above The First Encounter's, so the engine never reads these, except its intro and credits
+texts, which it reads from The First Encounter's own copies). The group files are rewritten
+with their files stored, and every file is served xz-compressed (`<path>.xz`), in segments of
+16 MiB of the file, each its own xz stream: 116 MB to download instead of 197 MB (the
+browser keeps them unpacked, 241 MB).
+
 `web/build/dist` is a static site: serve it with any web server, e.g.
 
 ```sh
@@ -145,11 +155,15 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   Settings are saved whenever the page is hidden, since a tab can be closed at any time.
 - **Demo download.** `shell/demo-download.js` downloads the files that each demo's
   `demo-files.json` lists, from the [mirrors](#demo-mirrors) first, and from the site when they fail, which
-  keeps the site's bandwidth (GitHub Pages: 100 GB a month) for those who need it. Each file
-  is kept in IndexedDB in 1 MB pieces as it arrives (one database per version of the demo
-  data, named after a hash of its files; other versions are deleted), so later visits
-  download nothing, and a download that stopped goes on from where it was (with a range
-  request). Where IndexedDB can't be used, the files are downloaded into memory each visit.
+  keeps the site's bandwidth (GitHub Pages: 100 GB a month) for those who need it. An
+  xz-compressed file is asked for one segment at a time (a range request) and unpacked as it
+  arrives (`shell/xz.js`: xz-embedded as WebAssembly, from xzwasm), and kept in IndexedDB in
+  1 MB pieces (one database per version of the demo data, named after a hash of its files;
+  other versions are deleted before a new one is downloaded), so later visits download nothing,
+  and a download that stopped goes on from the segment it was in. A request that gets no data
+  for 20 s (`?stallms=`) is given up and asked again, then from the next source: a connection
+  that stalls would otherwise wait for ever. Where IndexedDB can't be used, the files are
+  downloaded into memory each visit.
   Only the official demos' files are downloaded from the site, which to our knowledge may be
   freely redistributed; the start page explains this to players. Files from a player's own
   installations never leave their device.
@@ -246,8 +260,8 @@ Other web sites can serve the demos, so that players don't use up the site's ban
 `web/build/dist/demo/` folder (with `tfe/` and `tse/` in it) anywhere on the web; its URL is
 the address of that copy (for `https://cdn.example.org/sam/demo/tfe/Levels/…` it is
 `https://cdn.example.org/sam/demo/`). Players' browsers download the files from it (with range
-requests to go on with a download that stopped; a file of the wrong size is downloaded
-from the next source), which needs these CORS headers:
+requests for the xz segments; a file of the wrong size, or a server that doesn't answer range
+requests, is downloaded from the next source), which needs these CORS headers:
 
 ```
 Access-Control-Allow-Origin: *
@@ -267,7 +281,7 @@ separated URLs): `DEMO_MIRRORS=https://cdn.example.org/sam/demo/ web/build.sh`. 
 Pages workflow takes it from the repository variable `DEMO_MIRRORS` (Settings → Secrets and
 variables → Actions → Variables). `?mirror=…` adds mirrors for a visit (for trying one out).
 A mirror must have exactly the files of the build's `demo/` (those the `demo-files.json`
-files list; empty files are left out and needn't be there).
+files list, most of them as `<path>.xz`; empty files are left out and needn't be there).
 
 ## Page options
 

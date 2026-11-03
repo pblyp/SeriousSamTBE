@@ -13,7 +13,7 @@ playable in a web browser on computers and phones.
   follows, with your weapons. Both games' deathmatch maps are there too (e.g. Desert Temple),
   with The Second Encounter's weapons.
 - **The demos, out of the box.** The official demos of both games (Karnak, then Palenque;
-  about 200 MB) are downloaded once and kept in the browser.
+  about 120 MB) are downloaded once and kept in the browser.
 - **The full games, with your own copies.** Zip the folders where both games are installed
   and pick the two .zip files (or one with both folders) on the start page. Your files never
   leave your device; they are kept in the browser, so next time *Play my game files* starts

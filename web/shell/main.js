@@ -11,6 +11,7 @@
 //   touch=auto|on|off    touch screen controls (otherwise as chosen on the page)
 //   touchdebug           show what the touch controls receive
 //   mirror=https://...   more demo mirrors (comma separated), besides the ones the build lists
+//   stallms=20000        how long a demo download may go without data before it is asked again (tests)
 //   join=K7Q2MX          join the network game in that room (a link the host shares)
 //   quickjoin            join right away, without the join menu (for tests)
 //   net=local            network games between tabs of this browser (for tests)
@@ -859,6 +860,8 @@
         const files = await DemoDownload.download({
           base: `demo/${demo.folder}/`,
           prefix: demo.prefix,
+          // (shorter in tests)
+          ...(params.has('stallms') ? { stallMs: Number(params.get('stallms')) } : {}),
           // (a mirror has a copy of the site's demo/ folder)
           mirrors: (list('mirror') || []).map((url) => new URL(`${demo.folder}/`, url.replace(/\/?$/, '/')).href),
           log,

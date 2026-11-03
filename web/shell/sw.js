@@ -21,7 +21,8 @@ const CACHE = Game.cache;
 // (the demos' file lists, see demo-download.js)
 const DEMO_FILES = Game.demos.map(({ folder }) => `demo/${folder}/demo-files.json`);
 const SHELL = [
-  './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'demo-download.js', 'zip.js', 'archives.js',
+  './', 'index.html', 'style.css', 'config.js', 'main.js', 'fullscreen.js', 'xz.js', 'demo-download.js', 'zip.js',
+  'archives.js',
   'netplay.js', 'touch.js', 'gamepad.js', 'base-data.js',
   ...DEMO_FILES, 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-256.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',

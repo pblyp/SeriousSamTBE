@@ -1,11 +1,12 @@
 // Checks how the demos are downloaded (shell/demo-download.js), The First Encounter's then The
 // Second Encounter's:
 //  1. from the site, then from IndexedDB on the next visit (nothing downloaded)
-//  2. a download that stopped (a file cut short) goes on from where it was on the next visit,
-//     and the file is whole
+//  2. a download that stopped (an xz segment cut short) goes on from that segment on the next
+//     visit, and the file is whole
 //  3. from a mirror (another site with a copy of demo/, ?mirror=), not from the site
 //  4. from the site, when the mirror doesn't have the files
 //  5. from an http address that isn't localhost (like a computer on the local network)
+//  6. a mirror whose connection stalls (sends a little, then nothing): given up, from the site
 // and that the kept demos can be exported as a .zip ("Export the demos…"), all of their files as
 // the site has them, but not before they are all downloaded
 //
@@ -15,6 +16,7 @@ import { chromium } from 'playwright';
 import { serve } from './server.mjs';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -34,20 +36,26 @@ const errors = [];
 // the demos, as config.js has them
 const demos = [['tfe', 'tbe-demo-tfe-'], ['tse', 'tbe-demo-tse-']].map(([folder, prefix]) => ({ folder, prefix,
   ...JSON.parse(fs.readFileSync(path.join(DIST, 'demo', folder, 'demo-files.json'))) }));
-const DEMO_BYTES = demos.reduce((sum, demo) => sum + demo.files.reduce((n, file) => n + file.size, 0), 0);
-// the biggest file (The Second Encounter's): the one cut short; the files after it aren't
-// downloaded then
+// (what a file's download is: its xz segments, or the file)
+const downloadSize = (file) => (file.xz ? file.xz.reduce((a, b) => a + b, 0) : file.size);
+const DEMO_BYTES = demos.reduce((sum, demo) => sum + demo.files.reduce((n, file) => n + downloadSize(file), 0), 0);
+// the biggest file (The Second Encounter's): its second xz segment is cut short; that segment and
+// the files after it aren't downloaded then
 const cut = demos[1];
 const biggest = cut.files.reduce((a, b) => (b.size > a.size ? b : a));
-const fromBiggestOn = cut.files.slice(cut.files.indexOf(biggest)).reduce((sum, file) => sum + file.size, 0);
-const CUT_AT = 5 << 20;
+const SECOND = [biggest.xz[0], biggest.xz[0] + biggest.xz[1] - 1];
+const fromSecondOn = biggest.xz.slice(1).reduce((a, b) => a + b, 0)
+  + cut.files.slice(cut.files.indexOf(biggest) + 1).reduce((sum, file) => sum + downloadSize(file), 0);
 // a checksum of the bytes (FNV-1a), the same in the page
 function checksum(data) {
   let h = 0x811c9dc5;
   for (let i = 0; i < data.length; i++) h = Math.imul(h ^ data[i], 0x01000193) >>> 0;
   return h;
 }
-const biggestSum = checksum(fs.readFileSync(path.join(DIST, 'demo', cut.folder, biggest.path)));
+// (the file unpacked, as the page keeps it)
+const unpacked = (file) => execFileSync('python3', ['-I', '-c', 'import lzma, sys; sys.stdout.buffer.write(lzma.decompress(open(sys.argv[1], "rb").read()))',
+  file], { maxBuffer: 1 << 30 });
+const biggestSum = checksum(unpacked(path.join(DIST, 'demo', cut.folder, `${biggest.path}.xz`)));
 
 async function openPage(query, { context = null, cutShort = false, origin = server.url } = {}) {
   // (no service worker: requests through it would get past the routes below)
@@ -62,10 +70,14 @@ async function openPage(query, { context = null, cutShort = false, origin = serv
       page.demoRequests.push({ url: r.url(), range: r.headers().range || '' });
     }
   });
-  // the biggest file cut short
+  // the biggest file's second segment cut short (the first one whole)
   if (cutShort) {
-    const bytes = fs.readFileSync(path.join(DIST, 'demo', cut.folder, biggest.path)).subarray(0, CUT_AT);
-    await page.route((url) => url.pathname === `/demo/${cut.folder}/${biggest.path}`, (route) => route.fulfill({ status: 200, body: bytes }));
+    const xz = fs.readFileSync(path.join(DIST, 'demo', cut.folder, `${biggest.path}.xz`));
+    await page.route((url) => url.pathname === `/demo/${cut.folder}/${biggest.path}.xz`, (route) => {
+      if (route.request().headers().range !== `bytes=${SECOND[0]}-${SECOND[1]}`) return route.continue();
+      return route.fulfill({ status: 206, headers: { 'Content-Range': `bytes ${SECOND[0]}-${SECOND[1]}/${xz.length}` },
+        body: xz.subarray(SECOND[0], SECOND[0] + ((SECOND[1] - SECOND[0]) >> 1)) });
+    });
   }
   // a stand-in for the engine, which only takes the files
   await page.route(/serioussamtbe\.js$/, (route) => route.fulfill({ contentType: 'text/javascript', body: `
@@ -100,7 +112,7 @@ async function exportDemos(context, file) {
 }
 
 // the exported .zip: whole (its CRCs), with each demo's files in a folder of its name, exactly as
-// the site has them: what is wrong, or ''
+// the site has them (unpacked): what is wrong, or ''
 function checkDemoExport(file) {
   try {
     execFileSync('unzip', ['-tq', file], { stdio: 'pipe' });
@@ -113,9 +125,10 @@ function checkDemoExport(file) {
   const names = { tfe: 'The First Encounter\'s demo', tse: 'The Second Encounter\'s demo' };
   let count = 0;
   for (const demo of demos) {
-    for (const { path: p } of demo.files) {
+    for (const { path: p, xz } of demo.files) {
       const exported = path.join(dir, names[demo.folder], p);
-      if (!fs.existsSync(exported) || !fs.readFileSync(exported).equals(fs.readFileSync(path.join(DIST, 'demo', demo.folder, p)))) {
+      const served = path.join(DIST, 'demo', demo.folder, p);
+      if (!fs.existsSync(exported) || !fs.readFileSync(exported).equals(xz ? unpacked(`${served}.xz`) : fs.readFileSync(served))) {
         return `${names[demo.folder]}/${p} differs`;
       }
       count++;
@@ -179,7 +192,7 @@ const show = (d) => (d ? `${d[0]} MB, ${d[1]} MB from the site, ${d[2]} MB from 
   const page = await openPage('', { context });
   const whole = await ready(page);
   const download = await downloaded(page);
-  const resumed = page.demoRequests.find((r) => r.url.endsWith(`/demo/${cut.folder}/${biggest.path}`));
+  const resumed = page.demoRequests.find((r) => r.url.endsWith(`/demo/${cut.folder}/${biggest.path}.xz`));
   // (the file as it is kept)
   const sum = await page.evaluate(async ({ db: name, path, check }) => {
     const db = await new Promise((resolve) => { const r = indexedDB.open(name); r.onsuccess = () => resolve(r.result); });
@@ -194,7 +207,7 @@ const show = (d) => (d ? `${d[0]} MB, ${d[1]} MB from the site, ${d[2]} MB from 
     return (0, eval)(`(${check})`)(data);
   }, { db: cut.prefix + cut.version, path: biggest.path, check: checksum.toString() });
   results[`a download that stopped goes on (${show(download)}; ${biggest.path} asked for ${resumed ? resumed.range || 'all' : 'nothing'})`] =
-    failed && whole && resumed && resumed.range === `bytes=${CUT_AT}-` && download && download[0] === mb(fromBiggestOn - CUT_AT)
+    failed && whole && resumed && resumed.range === `bytes=${SECOND[0]}-${SECOND[1]}` && download && download[0] === mb(fromSecondOn)
     && sum === biggestSum;
   await context.close();
 }
@@ -229,6 +242,38 @@ const show = (d) => (d ? `${d[0]} MB, ${d[1]} MB from the site, ${d[2]} MB from 
   const insecure = await page.evaluate(() => !isSecureContext);
   results[`plain http (${show(download)})`] = whole && insecure && download && isWholeDemo(download[0]);
   await page.context().close();
+}
+
+// 6. a mirror that stalls: it sends the start of what is asked for, then nothing (as a connection
+// that stalled); the page gives it up after ?stallms and downloads from the site
+{
+  const sockets = new Set();
+  const stalling = http.createServer((req, res) => {
+    const file = path.join(DIST, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+    const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Range',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length' };
+    if (req.method === 'OPTIONS') return res.writeHead(204, headers).end();
+    if (!fs.existsSync(file)) return res.writeHead(404, headers).end();
+    const data = fs.readFileSync(file);
+    const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
+    const start = range ? Number(range[1]) : 0;
+    const end = range && range[2] ? Number(range[2]) : data.length - 1;
+    res.writeHead(range ? 206 : 200, { ...headers, 'Content-Length': end - start + 1,
+      ...(range ? { 'Content-Range': `bytes ${start}-${end}/${data.length}` } : {}) });
+    res.write(data.subarray(start, Math.min(start + 4096, end + 1)));
+  });
+  stalling.on('connection', (socket) => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+  await new Promise((resolve) => stalling.listen(0, '127.0.0.1', resolve));
+  const page = await openPage(`stallms=2000&mirror=${encodeURIComponent(`http://127.0.0.1:${stalling.address().port}/demo/`)}`);
+  const whole = await ready(page);
+  const download = await downloaded(page);
+  const said = (await engineLog(page)).filter((l) => l.startsWith('Demo download:'));
+  results[`a mirror that stalls is given up, then from the site (${said.at(-1) || 'nothing said'}; ${show(download)})`] = whole
+    && said.some((l) => /No data for 2 s/.test(l)) && said.some((l) => /; from the site$/.test(l))
+    && download && isWholeDemo(download[1]);
+  await page.context().close();
+  for (const socket of sockets) socket.destroy();
+  stalling.close();
 }
 
 await browser.close();

@@ -6,7 +6,9 @@
 // archive. The cache is kept small, so pieces are read again and again. The demo's
 // SE1_10b.gro is in /data, the others in /tfe, the CD path (as The First Encounter's files).
 //
-// Needs the web build (web/build.sh) and The First Encounter's demo in dist/demo/tfe.
+// Needs the web build (web/build.sh) and The First Encounter's demo as it is fetched, in
+// web/build/demo-data (its group files with their files deflated; the site's are stored and
+// xz-compressed, see tools/pack_demo.py).
 //
 //   node archive-reader.mjs [--browser chromium|webkit|firefox] [--build jspi|asyncify]
 
@@ -42,7 +44,8 @@ for (const variant of new Set(runs.map(([, v]) => v))) {
   }
 }
 
-const groups = fs.readdirSync(path.join(buildDir, 'dist/demo/tfe')).filter((name) => name.endsWith('.gro')).sort();
+const demoDir = path.join(buildDir, 'demo-data');
+const groups = fs.readdirSync(demoDir).filter((name) => name.endsWith('.gro')).sort();
 const server = await serve();
 const results = {};
 const errors = [];
@@ -57,6 +60,9 @@ for (const [name, variant] of runs) {
     const file = new URL(route.request().url()).pathname.replace(/^\/archive-test\//, '');
     if (file === 'index.html') {
       return route.fulfill({ contentType: 'text/html', body: '<!doctype html><script src="archives.js"></script>' });
+    }
+    if (file.startsWith('gro/')) {
+      return route.fulfill({ path: path.join(demoDir, path.basename(file)), contentType: 'application/octet-stream' });
     }
     const source = file === 'archives.js' ? path.resolve(here, '../shell/archives.js')
       : path.join(buildDir, `wasm-tbe-${variant}`, path.basename(file));
@@ -77,7 +83,7 @@ for (const [name, variant] of runs) {
     const args = ['--cd', '/tfe/'];
     let bytes = 0;
     for (const name of groups) {
-      const response = await fetch(`/demo/tfe/${name}`);
+      const response = await fetch(`/archive-test/gro/${name}`);
       const { size } = await GameArchives.store(db, name, response.body);
       const where = name === 'SE1_10b.gro' ? `/data/${name}` : `/tfe/${name}`;
       GameArchives.register(where, 'archive-test', name, size);
