@@ -2352,21 +2352,37 @@ functions:
     m_penCamera = NULL;
   }
 
-  // The First Encounter's keys have the same numbers as this game's: forget the keys when going
-  // from one game's levels to the other's
-  void ForgetKeysOfOtherGame(void)
+  // going from one game's levels to the other's (before the player is put at the level's start):
+  // The First Encounter's keys have the same numbers as this game's, so they are forgotten, and
+  // after The First Encounter's end, The Second Encounter starts with the starting weapons (the
+  // start marker gives them), as a new game does. TRUE if it is that end
+  BOOL CrossToOtherGame(void)
   {
     const BOOL bTFE = GetWorld()->wo_bTFE;
-    if (bTFE!=m_bInTFEWorld) {
-      m_ulKeys = 0;
-      m_bInTFEWorld = bTFE;
-      // (coming from The First Encounter's end)
-      if (m_bTFEHandOff) {
-        m_tmTFEHandOff = _pTimer->CurrentTick();
-      }
-      m_bSkipTFEEnding = FALSE;
-      m_bTFEHandOff = FALSE;
+    if (bTFE==m_bInTFEWorld) {
+      return FALSE;
     }
+    m_ulKeys = 0;
+    m_bInTFEWorld = bTFE;
+    if (bTFE) {
+      return FALSE;
+    }
+    // (coming from The First Encounter's end)
+    if (m_bTFEHandOff) {
+      m_tmTFEHandOff = _pTimer->CurrentTick();
+    }
+    m_bSkipTFEEnding = FALSE;
+    m_bTFEHandOff = FALSE;
+    CPlayerWeapons *penWeapons = GetPlayerWeapons();
+    penWeapons->m_iCurrentWeapon = WEAPON_NONE;
+    penWeapons->m_iWantedWeapon = WEAPON_NONE;
+    penWeapons->ClearWeapons();
+    m_iSeriousBombCount = 0;
+    m_tmInvisibility = 0.0f;
+    m_tmInvulnerability = 0.0f;
+    m_tmSeriousDamage = 0.0f;
+    m_tmSeriousSpeed = 0.0f;
+    return TRUE;
   }
 
   // lines in a text of The First Encounter's (its copy, which has the same name as this game's)
@@ -5810,7 +5826,7 @@ procedures:
  *                     WORLD CHANGE                         *
  ************************************************************/
   WorldChange() {
-    ForgetKeysOfOtherGame();
+    const BOOL bFromFirstEncounter = CrossToOtherGame();
     // if in single player
     if (GetSP()->sp_bSinglePlayer) {
       // mark world as visited
@@ -5822,6 +5838,9 @@ procedures:
     // store group name
     m_strGroup = _SwcWorldChange.strGroup;
     TeleportPlayer((WorldLinkType)_SwcWorldChange.iType);
+    if (bFromFirstEncounter) {
+      CPrintF("The Second Encounter: weapons %08x\n", GetPlayerWeapons()->m_iAvailableWeapons);
+    }
     // setup light source
     SetupLightSource();
 
@@ -5843,7 +5862,7 @@ procedures:
 
   WorldChangeDead() 
   {
-    ForgetKeysOfOtherGame();
+    CrossToOtherGame();
     // forbid respawning in-place when changing levels while dead
     m_ulFlags &= ~PLF_RESPAWNINPLACE;
 

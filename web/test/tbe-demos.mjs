@@ -1,7 +1,9 @@
 // The Both Encounters with the two games' demos (web/build.sh fetches them): "Play the demos"
 // downloads The First Encounter's (the site's, shared with its page) and The Second Encounter's,
-// both demo levels can be chosen in Custom Level, New Game starts the Karnak demo level, "please giveall" gives the weapons the demos have files
-// for, and at Karnak's end (started with dbg_bFirstEncounterEnd) the Palenque demo level follows.
+// both demo levels can be chosen in Custom Level, New Game starts the Karnak demo level, "please
+// giveall" gives the weapons the demos have files for, and at Karnak's end (started with
+// dbg_bFirstEncounterEnd=2, as the last enemies' death does) Fire skips its credits and the
+// Palenque demo level follows, with the starting weapons.
 // Screenshots in web/build/tbe-demos-*.png.
 //
 //   node tbe-demos.mjs [--browser chromium|webkit]
@@ -79,9 +81,10 @@ results['"please giveall" gives the weapons the demos have'] = !(await page.eval
   .some((l) => l.includes('FatalError')) && !await page.isVisible('#error');
 
 // Karnak's end, then Palenque
-await command(page, 'dbg_bFirstEncounterEnd=1;');
-const ending = await waitLog(page, /dbg_bFirstEncounterEnd: /, 30000);
-await page.waitForTimeout(6000);
+await command(page, 'dbg_bFirstEncounterEnd=2;');
+const ending = await waitLog(page, /dbg_bFirstEncounterEnd: Trigger player marker/, 30000)
+  && await waitLog(page, /The First Encounter's end: its credits/, 60000);
+await page.waitForTimeout(4000);
 await shot(page, 'credits');
 await page.mouse.down();
 await page.waitForTimeout(300);
@@ -93,9 +96,11 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(2000);
 await shot(page, 'palenque');
 const log = await page.evaluate(() => window.engineLog);
-for (const l of log.filter((l) => /dbg_bFirstEncounterEnd|Second Encounter follows|FatalError|Cannot open/.test(l)).slice(-10)) console.log(`  ${l}`);
-results['at Karnak\'s end the Palenque demo follows'] = ending && followed
+for (const l of log.filter((l) => /dbg_bFirstEncounterEnd|First Encounter's end|Second Encounter|FatalError|Cannot open/.test(l)).slice(-10)) console.log(`  ${l}`);
+results['at Karnak\'s end Fire skips the credits, and the Palenque demo follows'] = ending && followed
   && !log.some((l) => l.includes('FatalError')) && !await page.isVisible('#error');
+const weapons = (log.find((l) => l.startsWith('The Second Encounter: weapons ')) || '').slice(-8);
+results[`Palenque starts with the starting weapons (${weapons || 'none'})`] = weapons === '00000003';
 // (the music, mp3 files in the group files, is copied out of them to play)
 results['the music plays from the group files'] = !log.some((l) => /Cannot open (mpx|encoded audio) /.test(l));
 
