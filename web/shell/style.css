@@ -25,14 +25,15 @@ html, body {
   height: 100%;
   outline: none;
 }
+/* (the panel is centred while it fits, see #panel; when it doesn't, as on phones in
+   landscape, it starts at the top and the rest scrolls) */
 #overlay {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--panel);
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 #overlay[hidden], [hidden] {
   display: none !important;
@@ -42,6 +43,7 @@ html, body {
   outline-offset: 8px;
 }
 #panel {
+  margin: auto;
   text-align: center;
   width: min(30rem, calc(100vw - 32px));
   padding: 2rem 16px;

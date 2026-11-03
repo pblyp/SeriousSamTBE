@@ -1,5 +1,6 @@
 // Starts the game the way a phone player does (tapping Play, Start and NETRICSA's
-// Exit) on emulated phones, then checks that the touch controls drive the game.
+// Exit) on emulated phones, then checks that the touch controls drive the game; and that
+// all of the start page can be scrolled to.
 // The iPhone run removes what iPhone Safari lacks: element fullscreen, pointer lock
 // and JSPI.
 //
@@ -41,6 +42,17 @@ for (const run of runs) {
   const results = {};
   try {
     await page.goto(`${server.url}/index.html?args=${encodeURIComponent('+level Levels/KarnakDemo.wld')}`);
+    // all of the start page can be seen, scrolling it when it doesn't fit (as in landscape)
+    const { top, bottom, screen } = await page.evaluate(() => {
+      const overlay = document.getElementById('overlay');
+      overlay.scrollTop = 0;
+      const title = document.querySelector('#panel h1').getBoundingClientRect().top;
+      overlay.scrollTop = overlay.scrollHeight;
+      const end = document.getElementById('choose').lastElementChild.getBoundingClientRect().bottom;
+      overlay.scrollTop = 0;
+      return { top: Math.round(title), bottom: Math.round(end), screen: overlay.clientHeight };
+    });
+    results[`the start page scrolls to all of it (title at ${top}, its end at ${bottom} of ${screen})`] = top >= 0 && bottom <= screen;
     await page.tap('#play-demo');
     await page.waitForSelector('#start:not([hidden])', { timeout: 180000 });
     await page.tap('#start');
