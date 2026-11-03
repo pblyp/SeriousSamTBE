@@ -786,8 +786,9 @@ void CInput::GetInput(BOOL bPreScan)
     INDEX iWheel;
     Web_GetTouchInput(aubTouch, fLookX, fLookY, iWheel);
     if (!bPreScan) {
+      // (the Serious Bomb's key: 0)
       static const INDEX aiTouchKIDs[WTB_COUNT] = {
-        KID_W, KID_S, KID_A, KID_D, KID_SPACE, KID_C, KID_MOUSE1, KID_MOUSE2 };
+        KID_W, KID_S, KID_A, KID_D, KID_SPACE, KID_C, KID_MOUSE1, KID_MOUSE2, KID_0 };
       for (INDEX i=0; i<WTB_COUNT; i++) {
         if (aubTouch[i]) inp_ubButtonsBuffer[aiTouchKIDs[i]] = 0xFF;
       }

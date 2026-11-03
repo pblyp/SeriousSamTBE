@@ -781,6 +781,16 @@ static void HUD_DrawEntityStack()
 
 // render interface (frontend) to drawport
 // (units are in pixels for 640x480 resolution - for other res HUD will be scalled automatically)
+// tell the page in the web build what it shows of the player besides the game: its touch
+// controls show a button for the Serious Bomb while the player has one (every frame, for the
+// player whose view is drawn; also with the HUD off)
+extern void HUD_TellPage(const CPlayer *penPlayer)
+{
+#ifdef PLATFORM_EMSCRIPTEN
+  Web_SetSeriousBombs(penPlayer->m_iSeriousBombCount);
+#endif
+}
+
 extern void DrawHUD( const CPlayer *penPlayerCurrent, CDrawPort *pdpCurrent, BOOL bSnooping, const CPlayer *penPlayerOwner)
 {
   // no player - no info, sorry

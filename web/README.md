@@ -191,14 +191,16 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   screens, or chosen on the start page): an analog stick under the left thumb, dragging
   on the right to look, and buttons. The engine reads them every frame: the stick as an
   analog movement axis (`Web_GetTouchMove()`, a short push walks), the rest as the keys
-  and mouse of the default controls (`Web_GetTouchInput()`: Space, C, mouse buttons and
-  wheel). In menus, NETRICSA and demos they hide, and taps work as mouse clicks.
+  and mouse of the default controls (`Web_GetTouchInput()`: Space, C, mouse buttons,
+  wheel, and 0 for the Serious Bomb, whose button is there while the player has one: the
+  game tells the page, `Web_SetSeriousBombs()`). In menus, NETRICSA and demos they hide,
+  and taps work as mouse clicks.
 - **Gamepads.** `shell/gamepad.js` reads the browser's Gamepad API once per frame
   (`Web_PollGamepad()`). While playing, the engine takes the sticks and buttons as a fixed
   layout like the console version's (`Web_GetPadInput()`, `CControls::CreateAction()`): the
   sticks are analog movement and turning (by the controls' sensitivity and invert look), the
-  buttons set the controls' actions (`ctl_bFire`, …) directly, so changed key bindings don't
-  matter. In menus, the console and NETRICSA the pad presses keys (arrows, Enter, Escape,
+  buttons set the controls' actions (`ctl_bFire`, …; the D-pad's right `ctl_bFireBomb`)
+  directly, so changed key bindings don't matter. In menus, the console and NETRICSA the pad presses keys (arrows, Enter, Escape,
   Page Up/Down) and the right stick moves the mouse.
 - **Aim assist.** A shot goes to the enemy nearest to the crosshair whose bounding box
   overlaps a square 150% the size of the crosshair (`CPlayerWeapons::AimAssistTarget()`),

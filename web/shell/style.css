@@ -246,6 +246,16 @@ html.touch, html.touch body, html.touch #canvas {
   right: 10vmin;
   bottom: 42vmin;
 }
+/* (only while the player has a Serious Bomb) */
+.tc-bomb {
+  right: 27vmin;
+  bottom: 37vmin;
+  border-color: rgba(255, 110, 80, 0.8);
+  background: rgba(170, 30, 10, 0.35);
+}
+.tc-bomb:not(.available) {
+  display: none;
+}
 .tc-weapon-prev,
 .tc-weapon-next {
   right: 8px;

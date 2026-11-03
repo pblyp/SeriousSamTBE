@@ -52,13 +52,14 @@ Playing
 - **Keyboard and mouse:** click the game to capture the mouse. <kbd>Esc</kbd> opens the
   menu, <kbd>~</kbd> the console, and <kbd>F11</kbd> goes fullscreen.
 - **Touch:** the left thumb moves, dragging on the right looks around, and there are
-  buttons for Fire, Jump, Duck, Use, weapons and Esc. Taps work as clicks in the menus.
-  The controls are on by default on touch screens, and can be switched on the start page.
+  buttons for Fire, Jump, Duck, Use, weapons and Esc, and Bomb while you have a Serious
+  Bomb. Taps work as clicks in the menus. The controls are on by default on touch screens,
+  and can be switched on the start page.
 - **Gamepad:** press a button on it once the page is open (browsers only show a pad after
   that). The left stick moves, the right stick looks, RT fires, LT or X uses, A jumps,
-  B ducks, LB/RB (or the D-pad) change weapons, Y flips to the last weapon, Back opens
-  NETRICSA and Start the menu. In the menus the D-pad or left stick moves, A chooses and
-  B goes back.
+  B ducks, LB/RB (or the D-pad's up and down) change weapons, Y flips to the last weapon,
+  the D-pad's right fires a Serious Bomb, Back opens NETRICSA and Start the menu. In the
+  menus the D-pad or left stick moves, A chooses and B goes back.
 - **Cheats** (single player): in the console (<kbd>~</kbd>), `please god`, `please giveall`,
   `please killall`, `please open`, `please tellall`, `please fly`, `please ghost`,
   `please invisible`, `please refresh`, `please pow` (a Serious Bomb) and `please star`

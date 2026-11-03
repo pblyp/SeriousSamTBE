@@ -35,7 +35,7 @@ ENGINE_API CTString Web_TakeCommands(void);
 // (the page moves with an analog stick, see Web_GetTouchMove(), not with the movement buttons)
 enum WebTouchButton {
   WTB_FORWARD, WTB_BACKWARD, WTB_LEFT, WTB_RIGHT,
-  WTB_JUMP, WTB_CROUCH, WTB_FIRE, WTB_USE,
+  WTB_JUMP, WTB_CROUCH, WTB_FIRE, WTB_USE, WTB_BOMB,
   WTB_COUNT
 };
 // get the state of the touch buttons, and the look movement (in pixels) and
@@ -72,5 +72,7 @@ ENGINE_API FLOAT Web_TimeSinceEscape(void);
 
 // tell the page whether the game is taking input (playing), or menus are up
 ENGINE_API void Web_SetGameInput(BOOL bGameInput);
+// tell the page how many Serious Bombs the player has (its touch controls show a button for them)
+ENGINE_API void Web_SetSeriousBombs(INDEX ctBombs);
 
 #endif  /* include-once check. */

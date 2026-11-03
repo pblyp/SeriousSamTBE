@@ -1,6 +1,8 @@
 // Checks the touch screen controls on their own (analog stick, taps as the mouse),
 // then plays with them: closes NETRICSA with a tap, walks with the joystick, looks
-// around, shoots, and opens the menu with the Esc button.
+// around, shoots, gets a Serious Bomb with the cheat "please pow" (and the power-ups with
+// "please star") and fires it with the Bomb button, which is there only while there is one,
+// and opens the menu with the Esc button.
 //
 //   node touch.mjs [--out dir] [--size 844x390]
 
@@ -110,6 +112,41 @@ await shot('4-firing');
 await wait(700);
 await touch('touchEnd', []);
 
+// the Serious Bomb: no button without one; "please pow" in the console gives one (at most 3)
+// and the button shows; tapping it fires the bomb, and the button goes
+const bombShown = () => page.evaluate(() => {
+  const el = document.querySelector('.tc-bomb');
+  return el && getComputedStyle(el).display !== 'none' ? el.textContent : '';
+});
+const bombs = () => page.evaluate(() => Module.webBombs);
+async function inConsole(line) {
+  await page.keyboard.press('Backquote');
+  await wait(500);
+  await page.keyboard.type(line);
+  await page.keyboard.press('Enter');
+  await wait(300);
+  await page.keyboard.press('Backquote');
+  await wait(800);
+}
+const noBombButton = (await bombShown()) === '' && (await bombs()) === 0;
+await inConsole('please pow');
+const oneBomb = { count: await bombs(), button: await bombShown() };
+await shot('5-bomb');
+const bombAt = await page.evaluate(() => {
+  const r = document.querySelector('.tc-bomb').getBoundingClientRect();
+  return [r.x + r.width / 2, r.y + r.height / 2];
+});
+await touch('touchStart', [[bombAt[0], bombAt[1], 5]]);
+await wait(150);
+await touch('touchEnd', []);
+await wait(1500);
+await shot('6-bomb-fired');
+const fired = { count: await bombs(), button: await bombShown() };
+for (let i = 0; i < 4; i++) await inConsole('please pow');
+const most = { count: await bombs(), button: await bombShown() };
+await inConsole('please star');
+const cheatLog = await page.evaluate(() => window.engineLog);
+
 // the Esc button opens the menu
 const esc = await page.evaluate(() => {
   const r = document.querySelector('.tc-escape').getBoundingClientRect();
@@ -120,7 +157,7 @@ await wait(80);
 await touch('touchEnd', []);
 await wait(1000);
 const menu = await page.evaluate(() => Module.webGameInput === false);
-await shot('5-menu');
+await shot('7-menu');
 
 await browser.close();
 server.close();
@@ -133,6 +170,12 @@ const results = {
     && backMove[1] < -0.7 && backMove[1] > -0.8 && releasedMove[1] === 0,
   'controls hidden while NETRICSA is up': controlsHiddenInMenu,
   'tapping Exit closed NETRICSA': playing,
+  [`"please pow" gives a Serious Bomb, and the Bomb button shows (${oneBomb.count}, "${oneBomb.button}")`]:
+    noBombButton && oneBomb.count === 1 && oneBomb.button === 'Bomb' && cheatLog.some((l) => l === 'pow: ON'),
+  [`the Bomb button fires it, and goes (${fired.count}, "${fired.button}")`]: fired.count === 0 && fired.button === '',
+  [`at most 3 Serious Bombs (${most.count}, "${most.button}")`]: most.count === 3 && most.button === 'Bomb ×3'
+    && cheatLog.some((l) => l.startsWith('You can\'t carry more')),
+  '"please star" gives the power-ups': cheatLog.some((l) => l === 'star: ON') && cheatLog.some((l) => l.startsWith('Power-ups: ')),
   'Esc button opened the menu': menu,
   'no page errors': errors.length === 0,
 };

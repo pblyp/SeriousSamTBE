@@ -5,7 +5,8 @@
 // The game polls the pad once per frame (Web_PollGamepad() in the engine calls poll()).
 // While playing, the pad's state goes to Module.webPad, which the engine reads as a fixed
 // layout like the console version's (see CControls::CreateAction()): the left stick moves,
-// the right stick looks, the buttons are the controls' actions. Start opens the menu.
+// the right stick looks, the buttons are the controls' actions (the D-pad's right fires a
+// Serious Bomb). Start opens the menu.
 //
 // In menus, the console, NETRICSA and demos the pad presses keys: the D-pad or the left
 // stick the arrows, A Enter, B Escape, LB/RB Page Up/Down. The right stick moves the mouse,

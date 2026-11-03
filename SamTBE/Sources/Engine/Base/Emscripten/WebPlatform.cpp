@@ -189,6 +189,21 @@ void Web_SetGameInput(BOOL bGameInput)
   web_set_game_input(bGameInput);
 }
 
+EM_JS(void, web_set_serious_bombs, (int ctBombs), {
+  Module['webBombs'] = ctBombs;
+  if (Module['onWebBombs']) {
+    Module['onWebBombs'](ctBombs);
+  }
+});
+
+void Web_SetSeriousBombs(INDEX ctBombs)
+{
+  static INDEX _ctLast = -1;
+  if (_ctLast == ctBombs) return;
+  _ctLast = ctBombs;
+  web_set_serious_bombs(ctBombs);
+}
+
 static double _dLastYield = 0;
 
 // frame timing statistics (printed when web_bFrameStats is set)

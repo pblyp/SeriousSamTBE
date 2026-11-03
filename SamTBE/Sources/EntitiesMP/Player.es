@@ -122,6 +122,7 @@ event EAutoAction {
 
 %{
 extern void DrawHUD( const CPlayer *penPlayerCurrent, CDrawPort *pdpCurrent, BOOL bSnooping, const CPlayer *penPlayerOwner);
+extern void HUD_TellPage(const CPlayer *penPlayer);
 extern void InitHUD(void);
 extern void EndHUD(void);
 
@@ -5240,6 +5241,9 @@ functions:
 
     // do all queued screen blendings
     pdp->BlendScreen();
+
+    // (what the page shows besides the game: see HUD_TellPage())
+    HUD_TellPage(IsPredicted() ? (CPlayer *)GetPredictor() : this);
 
     // render status info line (if needed)
     if( hud_bShowInfo) { 

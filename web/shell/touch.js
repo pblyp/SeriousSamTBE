@@ -14,7 +14,7 @@
 (() => {
   // indices into webTouch.buttons, in the order of the engine's WebTouchButton
   // (the joystick sets webTouch.moveX/moveY instead of the movement buttons 0-3)
-  const JUMP = 4, CROUCH = 5, FIRE = 6, USE = 7;
+  const JUMP = 4, CROUCH = 5, FIRE = 6, USE = 7, BOMB = 8;
   const KEY_ESCAPE = 27;
 
   // how far (in CSS pixels) the joystick moves, and the part of that which doesn't move the player
@@ -87,7 +87,7 @@
   }
 
   function create(Module, canvas, container, { debug = false } = {}) {
-    const state = { buttons: new Uint8Array(8), lookX: 0, lookY: 0, wheel: 0, moveX: 0, moveY: 0 };
+    const state = { buttons: new Uint8Array(9), lookX: 0, lookY: 0, wheel: 0, moveX: 0, moveY: 0 };
     Module.webTouch = state;
     Module.webKeyPresses = Module.webKeyPresses || [];
 
@@ -168,6 +168,20 @@
     holdButton('tc-jump', 'Jump', JUMP, false);
     holdButton('tc-crouch', 'Duck', CROUCH, false);
     holdButton('tc-use', 'Use', USE, false);
+    // the Serious Bomb, there while the player has one (the game tells how many, see
+    // Web_SetSeriousBombs() in the engine)
+    const bomb = holdButton('tc-bomb', 'Bomb', BOMB, false);
+    const showBombs = (count) => {
+      bomb.classList.toggle('available', count > 0);
+      bomb.textContent = count > 1 ? `Bomb ×${count}` : 'Bomb';
+      // (gone while held: let go of it)
+      if (count === 0) {
+        state.buttons[BOMB] = 0;
+        bomb.classList.remove('pressed');
+      }
+    };
+    Module.onWebBombs = showBombs;
+    showBombs(Module.webBombs || 0);
 
     // buttons that do one thing per tap
     function tapButton(className, label, action) {

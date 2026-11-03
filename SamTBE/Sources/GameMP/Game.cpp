@@ -807,6 +807,7 @@ static const struct { INDEX iButton; const char *strAction; } _aPadActions[] = {
   { WPB_BACK,       "ctl_bComputer" },
   { WPB_LSTICK,     "ctl_b3rdPersonView" },
   { WPB_RSTICK,     "ctl_bCenterView" },
+  { WPB_DPAD_RIGHT, "ctl_bFireBomb" },
 };
 // how fast the right stick turns at full tilt (degrees per second, at sensitivity 50)
 static const FLOAT _fPadTurnSpeed = 220.0f;
