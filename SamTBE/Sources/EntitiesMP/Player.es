@@ -1204,6 +1204,7 @@ properties:
                                       // 0 if the level stopped them, -1 if they haven't started)
  195 BOOL m_bSkipTFEEnding = FALSE,    // set if the player skipped the rest of The First Encounter's ending
  196 BOOL m_bTFEHandOff = FALSE,       // set while The First Encounter's end hands over to The Second Encounter
+ 197 FLOAT m_tmTFEHandOff = -100.0f,   // when the player came into The Second Encounter from it
 
 {
   ShellLaunchData ShellLaunchData_array;  // array of data describing flying empty shells
@@ -2328,6 +2329,14 @@ functions:
     return TRUE;
   }
 
+  // a press of Fire or Use that ends a camera's view now (the cutscenes': the player can skip them),
+  // not one carried over from skipping The First Encounter's ending, just before The Second
+  // Encounter's recap starts
+  BOOL BreaksCamera(void)
+  {
+    return (ulNewButtons&(PLACT_FIRE|PLACT_USE)) && _pTimer->CurrentTick()-m_tmTFEHandOff>=2.0f;
+  }
+
   // what The First Encounter's ending leaves behind, undone before The Second Encounter: its
   // credits, and what its outro changed (e.g. travelling in a beam: no gravity, moved by itself)
   void LeaveTFEEnding(void)
@@ -2351,6 +2360,10 @@ functions:
     if (bTFE!=m_bInTFEWorld) {
       m_ulKeys = 0;
       m_bInTFEWorld = bTFE;
+      // (coming from The First Encounter's end)
+      if (m_bTFEHandOff) {
+        m_tmTFEHandOff = _pTimer->CurrentTick();
+      }
       m_bSkipTFEEnding = FALSE;
       m_bTFEHandOff = FALSE;
     }
@@ -4095,7 +4108,7 @@ functions:
       paAction.pa_aRotation     = ANGLE3D(0,0,0);
       paAction.pa_aViewRotation = ANGLE3D(0,0,0);
       // if fire or use is pressed
-      if (ulNewButtons&(PLACT_FIRE|PLACT_USE)) {
+      if (BreaksCamera()) {
         // stop camera
         m_penCamera=NULL;
       }
@@ -4121,7 +4134,7 @@ functions:
   void AutoActions(const CPlayerAction &pa) 
   {
     // if fire, use or computer is pressed
-    if (ulNewButtons&(PLACT_FIRE|PLACT_USE|PLACT_COMPUTER)) {
+    if (BreaksCamera() || (ulNewButtons&PLACT_COMPUTER)) {
       if (m_penCamera!=NULL) {
         CEntity *penOnBreak = ((CCamera&)*m_penCamera).m_penOnBreak;
         if (penOnBreak!=NULL) {
