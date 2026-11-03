@@ -1210,6 +1210,8 @@ properties:
  195 BOOL m_bSkipTFEEnding = FALSE,    // set if the player skipped the rest of The First Encounter's ending
  196 BOOL m_bTFEHandOff = FALSE,       // set while The First Encounter's end hands over to The Second Encounter
  197 FLOAT m_tmTFEHandOff = -100.0f,   // when the player came into The Second Encounter from it
+ 198 BOOL m_bHoldStartTrigger = FALSE,  // set while arriving from it: the start marker's target waits (see WorldChange())
+ 199 CEntityPointer m_penHeldStartTrigger,  // that target, until it is triggered
 
 {
   ShellLaunchData ShellLaunchData_array;  // array of data describing flying empty shells
@@ -5641,7 +5643,12 @@ functions:
       }
       // if there is a start trigger target
       if(CpmStart.m_penTarget!=NULL) {
-        SendToTarget(CpmStart.m_penTarget, EET_TRIGGER, this);
+        // (arriving from The First Encounter's end, a little later, see WorldChange())
+        if (m_bHoldStartTrigger) {
+          m_penHeldStartTrigger = CpmStart.m_penTarget;
+        } else {
+          SendToTarget(CpmStart.m_penTarget, EET_TRIGGER, this);
+        }
       }
 
     // default start position
@@ -5873,7 +5880,9 @@ procedures:
     FindMusicHolder();
     // store group name
     m_strGroup = _SwcWorldChange.strGroup;
+    m_bHoldStartTrigger = bFromFirstEncounter;
     TeleportPlayer((WorldLinkType)_SwcWorldChange.iType);
+    m_bHoldStartTrigger = FALSE;
     if (bFromFirstEncounter) {
       CPrintF("The Second Encounter: weapons %08x\n", GetPlayerWeapons()->m_iAvailableWeapons);
     }
@@ -5893,6 +5902,16 @@ procedures:
     UpdateLevelStats();
     m_ulFlags |= PLF_INITIALIZED;
     m_ulFlags &= ~PLF_CHANGINGLEVEL;
+
+    // arriving from The First Encounter's end: the start marker's target, once the level's entities
+    // have started (they start in the same tick as the player arrives, and some take a while before
+    // they listen: The Second Encounter's recap's music changer 0.1 s; when a level is started
+    // with New Game, its player comes later)
+    if (m_penHeldStartTrigger!=NULL) {
+      autowait(0.2f);
+      SendToTarget(m_penHeldStartTrigger, EET_TRIGGER, this);
+      m_penHeldStartTrigger = NULL;
+    }
     return;
   };
 

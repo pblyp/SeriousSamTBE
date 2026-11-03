@@ -5,7 +5,8 @@
 // way The Second Encounter's recap ("In the last episode") follows and plays (also with Fire
 // still pressed from the ending), with the starting weapons only. In a cooperative game (hosted
 // through the test server's hub), The Second Encounter's first level follows instead: the recap
-// is a single player's cinematic. (There the ending is started from its end of the game, with
+// is a single player's cinematic. Either way the music plays there (measured on the audio the
+// page puts out, with the sound effects muted). (There the ending is started from its end of the game, with
 // dbg_bFirstEncounterEnd=1: the outro's beam sequence is for single player only.) Screenshots in
 // web/build/tbe-handoff-*.png.
 //
@@ -36,6 +37,33 @@ const server = await serve();
 const browser = await { chromium, webkit }[browserName].launch({ headless: true,
   args: browserName === 'chromium' ? ['--use-angle=metal', '--autoplay-policy=no-user-gesture-required'] : [] });
 const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+// how loud the page's audio output is (the RMS of each block the game's audio fills): [time, level]
+await context.addInitScript(() => {
+  window.audioLevels = [];
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const create = Ctx.prototype.createScriptProcessor;
+  Ctx.prototype.createScriptProcessor = function (...args) {
+    const node = create.apply(this, args);
+    const real = Object.getOwnPropertyDescriptor(ScriptProcessorNode.prototype, 'onaudioprocess');
+    const measure = (e) => {
+      const data = e.outputBuffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      window.audioLevels.push([performance.now(), Math.sqrt(sum / data.length)]);
+    };
+    // (the game's handler, then the measuring, after it)
+    Object.defineProperty(node, 'onaudioprocess', {
+      get: () => real.get.call(node),
+      set: (fn) => { real.set.call(node, fn); node.addEventListener('audioprocess', measure); },
+    });
+    return node;
+  };
+});
+// the average level of the audio output from `from` (performance.now()) for seconds
+const audioLevel = (page, from, seconds) => page.evaluate(([from, seconds]) => {
+  const levels = window.audioLevels.filter(([t]) => t >= from && t < from + seconds * 1000).map(([, v]) => v);
+  return levels.length ? levels.reduce((a, b) => a + b, 0) / levels.length : 0;
+}, [from, seconds]);
 const results = {};
 
 // New Game, from the menu: Single Player, New Game, the difficulty
@@ -137,7 +165,12 @@ async function ending(label, press, coop = false) {
       outro && followed && atEnd >= 0 && log[atEnd + 1].startsWith("The First Encounter's end: The Second Encounter follows");
   }
   await waitLog(page, /The Second Encounter: weapons /, 60000);
+  // (the music only)
+  await command(page, 'snd_fSoundVolume=0;');
+  const arrived = await page.evaluate(() => performance.now());
   await page.waitForTimeout(30000);
+  const music = await audioLevel(page, arrived + 5000, 25);
+  results[`${label}: the music plays there (level ${music.toFixed(3)})`] = music > 0.02;
   const view = await letterbox(page);
   await shot(page, `${label}-${coop ? 'tse' : 'recap'}`);
   const log = await engineLog(page);
