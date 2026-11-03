@@ -96,6 +96,9 @@ button:focus-visible, .secondary:focus-visible {
   margin: 0.5rem 0 0;
   line-height: 1.4;
 }
+.note a {
+  color: var(--accent);
+}
 #status {
   margin: 0.5rem 0;
   min-height: 1.5em;

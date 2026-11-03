@@ -18,7 +18,11 @@ playable in a web browser on computers and phones.
   and pick the two .zip files (or one with both folders) on the start page. Your files never
   leave your device; they are kept in the browser, so next time *Play my game files* starts
   the game without the .zip files. They are read from the browser's storage as they are
-  needed, so both games fit on phones and tablets.
+  needed, so both games fit on phones and tablets. Don't have them? Buy them to support
+  Croteam: on Steam ([The First Encounter](https://store.steampowered.com/app/41050/Serious_Sam_Classic_The_First_Encounter/),
+  [The Second Encounter](https://store.steampowered.com/app/41060/Serious_Sam_Classic_The_Second_Encounter/))
+  or on GOG.com, completely DRM-free ([The First Encounter](https://www.gog.com/en/game/serious_sam_the_first_encounter),
+  [The Second Encounter](https://www.gog.com/en/game/serious_sam_the_second_encounter)).
 - **Network games.** The player who starts a game gets a room code and a link to send to
   the others. The games go through the page's server, when it can pass them on (the
   included server can; GitHub Pages can't).
@@ -26,6 +30,9 @@ playable in a web browser on computers and phones.
   left thumb, dragging on the right to look, and buttons.
 - **Settings and saved games** stay in the browser. *Clear my data* on the start page
   removes them; *Clear assets* removes the downloaded demos and your kept game files instead.
+- **Exporting.** *Export my game files…* and *Export the demos…* on the start page save what
+  the browser keeps as .zip files, which *Use my game files…* takes back. Exported game files
+  are for your personal use only, the full games' above all: please don't share them.
 
 It runs in current Chrome, Edge, Firefox and Safari (desktop, Android and iOS).
 

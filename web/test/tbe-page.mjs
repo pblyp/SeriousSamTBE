@@ -79,6 +79,22 @@ results['the page\'s names, the two demos, several .zip files can be picked'] =
   && await page.evaluate(() => document.getElementById('game-zip').multiple)
   && (await note(page)).includes('The Second Encounter') && (await note(page)).includes('The First Encounter');
 
+// exports are for personal use, and where to buy the games: each game on both stores, in a new tab
+const STORES = [
+  'https://store.steampowered.com/app/41050/Serious_Sam_Classic_The_First_Encounter/',
+  'https://store.steampowered.com/app/41060/Serious_Sam_Classic_The_Second_Encounter/',
+  'https://www.gog.com/en/game/serious_sam_the_first_encounter',
+  'https://www.gog.com/en/game/serious_sam_the_second_encounter',
+];
+const buyNote = await page.evaluate(() => {
+  const el = document.getElementById('buy-note');
+  return { text: el.textContent.replace(/\s+/g, ' '), visible: !!el.offsetParent,
+    links: [...el.querySelectorAll('a')].map((a) => ({ href: a.href, newTab: a.target === '_blank' && a.rel === 'noopener' })) };
+});
+results['the page says exports are for personal use, and links to both games on both stores'] = buyNote.visible
+  && buyNote.text.includes('personal use') && buyNote.text.includes('DRM-free')
+  && buyNote.links.length === STORES.length && buyNote.links.every(({ href, newTab }, i) => href === STORES[i] && newTab);
+
 // its options, under its own names
 results['the options are kept under the page\'s names (tbe.)'] =
   await page.evaluate(() => document.getElementById('touch-mode').value) === 'auto';
