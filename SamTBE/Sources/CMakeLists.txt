@@ -111,7 +111,7 @@ endif()
 #####  First Encounter's levels)                           #####
 ################################################################
 
-set(INTERNAL_NAME "serioussamtbo")
+set(INTERNAL_NAME "serioussamtbe")
 
 ###############################################################
 ###############################################################
@@ -133,7 +133,7 @@ endif()
 # the targets are named apart from The Second Encounter's (TS), so both can be built from the
 # main CMakeLists.txt; the libraries keep The Second Encounter's file names (MP), as the engine
 # loads them by those names (Entities + ModEXT.txt)
-set(TS "TBO")
+set(TS "TBE")
 
 ###############################################################
 ###############################################################
@@ -684,8 +684,8 @@ endmacro()
 #  we're cross-compiling the rest of the game.
 if(NOT ECC)
     add_parser_and_scanner("Ecc/Parser" "Ecc/Scanner")
-    add_executable(ecc-tbo Ecc/Main.cpp Ecc/Parser.cpp Ecc/Parser.h Ecc/Scanner.cpp)
-    set(ECC "ecc-tbo")
+    add_executable(ecc-tbe Ecc/Main.cpp Ecc/Parser.cpp Ecc/Parser.h Ecc/Scanner.cpp)
+    set(ECC "ecc-tbe")
 endif()
 
 macro(entity _NAME)

@@ -171,7 +171,7 @@ static void _list_dir(const char *name, int indent, CTString strGameID)
             _list_dir(path, indent + 2, strGameID);
         } else {
            // (The Both Encounters uses The Second Encounter's data)
-           if( strGameID == "serioussamse" || strGameID == "serioussamtbo") {
+           if( strGameID == "serioussamse" || strGameID == "serioussamtbe") {
                int _testfile = strncmp((const char *)entry->d_name, (const char *) "SE1_00_Levels.gro", (size_t) 13 ); 
                if( _testfile == 0) {
                   memcpy(_path, name, 2047);
@@ -819,7 +819,7 @@ ENGINE_API void SE_InitEngine(CTString strGameID)
     }
 
     // set testing files
-    if( strGameID == "serioussamse" || strGameID == "serioussamtbo") {
+    if( strGameID == "serioussamse" || strGameID == "serioussamtbe") {
       _fnm_TestFile = "SE1_00_Levels.gro";
     } else {
       _fnm_TestFile = "1_00_music.gro";

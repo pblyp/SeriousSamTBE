@@ -1,14 +1,14 @@
 // The Both Encounters with real installations (not part of npm test: it needs both games'
 // files, which aren't in the repository). Picks the two installations' .zip files on the
-// TBO page, then starts each level of both games in turn and reports what the engine said
+// TBE page, then starts each level of both games in turn and reports what the engine said
 // about it: missing entity classes, missing files, errors, and whether a player was added.
 // It also lists the files that both installations have with different contents (The Second
 // Encounter's are the ones used).
 //
-//   TBO_TSE_ZIP=<.zip of The Second Encounter's folder> TBO_TFE_ZIP=<.zip of The First
-//   Encounter's folder> node tbo-levels.mjs [--browser chromium|webkit] [level ...]
+//   TBE_TSE_ZIP=<.zip of The Second Encounter's folder> TBE_TFE_ZIP=<.zip of The First
+//   Encounter's folder> node tbe-levels.mjs [--browser chromium|webkit] [level ...]
 //
-// (or TBO_ZIP=<one .zip with both folders>). Levels are given as in the game, e.g.
+// (or TBE_ZIP=<one .zip with both folders>). Levels are given as in the game, e.g.
 // Levels/01_Hatshepsut.wld; without any, all of both games' levels are started.
 
 import { chromium, webkit, firefox } from 'playwright';
@@ -18,9 +18,9 @@ import fs from 'node:fs';
 const argv = process.argv.slice(2);
 const browserIndex = argv.indexOf('--browser');
 const browserName = browserIndex >= 0 ? argv.splice(browserIndex, 2)[1] : 'chromium';
-const zips = process.env.TBO_ZIP ? [process.env.TBO_ZIP] : [process.env.TBO_TSE_ZIP, process.env.TBO_TFE_ZIP];
+const zips = process.env.TBE_ZIP ? [process.env.TBE_ZIP] : [process.env.TBE_TSE_ZIP, process.env.TBE_TFE_ZIP];
 if (zips.some((z) => !z || !fs.existsSync(z))) {
-  console.log('Give the installations\' .zip files: TBO_TSE_ZIP and TBO_TFE_ZIP (or TBO_ZIP with both folders).');
+  console.log('Give the installations\' .zip files: TBE_TSE_ZIP and TBE_TFE_ZIP (or TBE_ZIP with both folders).');
   process.exit(2);
 }
 
@@ -105,6 +105,6 @@ await server.close();
 const failed = report.filter((r) => !r.started).length;
 console.log(`${report.length} levels: ${report.length - failed} started, ${failed} didn't; `
   + `${report.filter((r) => r.problems.length).length} with messages to look at`);
-fs.writeFileSync(new URL('../build/tbo-levels.json', import.meta.url), JSON.stringify({ ...found, report }, null, 2));
-console.log('Details in web/build/tbo-levels.json');
+fs.writeFileSync(new URL('../build/tbe-levels.json', import.meta.url), JSON.stringify({ ...found, report }, null, 2));
+console.log('Details in web/build/tbe-levels.json');
 process.exit(failed ? 1 : 0);

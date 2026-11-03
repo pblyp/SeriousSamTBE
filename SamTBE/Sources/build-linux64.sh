@@ -23,7 +23,7 @@ cd $_
 cmake -DCMAKE_BUILD_TYPE=Release ..  $1 $2 $3 $4 $5 $6 $7 $8 $9
 
 echo "ECC first"
-make ecc-tbo
+make ecc-tbe
 echo "Then the rest..."
 make -j$NCPU
 make install

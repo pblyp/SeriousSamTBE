@@ -2,7 +2,7 @@
 # Downloads the official Serious Sam: The Second Encounter demo (Windows) from archive.org,
 # extracts it and stages its game data (the Palenque demo level) into web/build/tse-demo-data,
 # for The Both Encounters' page, which plays it after The First Encounter's demo (see
-# fetch_demo_data.sh). Only the game data is taken: TBO's own scripts, controls and settings
+# fetch_demo_data.sh). Only the game data is taken: TBE's own scripts, controls and settings
 # are used.
 set -euo pipefail
 

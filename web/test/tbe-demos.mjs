@@ -2,9 +2,9 @@
 // downloads The First Encounter's (the site's, shared with its page) and The Second Encounter's,
 // both demo levels can be chosen in Custom Level, New Game starts the Karnak demo level, "please giveall" gives the weapons the demos have files
 // for, and at Karnak's end (started with dbg_bFirstEncounterEnd) the Palenque demo level follows.
-// Screenshots in web/build/tbo-demos-*.png.
+// Screenshots in web/build/tbe-demos-*.png.
 //
-//   node tbo-demos.mjs [--browser chromium|webkit]
+//   node tbe-demos.mjs [--browser chromium|webkit]
 
 import { chromium, webkit } from 'playwright';
 import { serve } from './server.mjs';
@@ -12,7 +12,7 @@ import { serve } from './server.mjs';
 const argv = process.argv.slice(2);
 const browserIndex = argv.indexOf('--browser');
 const browserName = browserIndex >= 0 ? argv.splice(browserIndex, 2)[1] : 'chromium';
-const shot = (page, name) => page.screenshot({ path: new URL(`../build/tbo-demos-${name}.png`, import.meta.url).pathname });
+const shot = (page, name) => page.screenshot({ path: new URL(`../build/tbe-demos-${name}.png`, import.meta.url).pathname });
 const waitLog = (page, re, timeout = 120000) => page.waitForFunction((source) => window.engineLog.some((l) => new RegExp(source).test(l)),
   re.source, { timeout }).then(() => true, () => false);
 const command = (page, text) => page.evaluate((text) => { (Module.webCommands = Module.webCommands || []).push(text); }, text);

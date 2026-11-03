@@ -40,7 +40,7 @@ CTString sam_strGameName = "serioussam";
 #else
 CTString sam_strFirstLevel = "Levels\\LevelsMP\\1_0_InTheLastEpisode.wld";
 CTString sam_strIntroLevel = "Levels\\LevelsMP\\Intro.wld";
-CTString sam_strGameName = "serioussamtbo";
+CTString sam_strGameName = "serioussamtbe";
 #endif
 
 CTimerValue _tvLastLevelEnd((__int64) -1);

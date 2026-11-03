@@ -29,26 +29,25 @@ for d in /opt/homebrew/opt/bison/bin /opt/homebrew/opt/flex/bin /usr/local/opt/b
 done
 
 # 1. the entity class compiler runs on the build machine
-NATIVE_DIR="$BUILD_DIR/ecc-tbo"
+NATIVE_DIR="$BUILD_DIR/ecc-tbe"
 cmake -S "$SRC_DIR" -B "$NATIVE_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release >/dev/null
-cmake --build "$NATIVE_DIR" --target ecc-tbo
-ECC="$NATIVE_DIR/ecc-tbo"
+cmake --build "$NATIVE_DIR" --target ecc-tbe
+ECC="$NATIVE_DIR/ecc-tbe"
 
 # 2. the engine, once per way of yielding to the browser
 for variant in $VARIANTS; do
-  out="$BUILD_DIR/wasm-tbo-$variant"
+  out="$BUILD_DIR/wasm-tbe-$variant"
   emcmake cmake -S "$SRC_DIR" -B "$out" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DECC="$ECC" -DWEB_ASYNC="$(echo "$variant" | tr a-z A-Z)" >/dev/null
-  cmake --build "$out" --target SeriousSamTBO
+  cmake --build "$out" --target SeriousSamTBE
   mkdir -p "$DIST_DIR/$variant"
-  cp "$out/serioussamtbo.js" "$out/serioussamtbo.wasm" "$DIST_DIR/$variant/"
+  cp "$out/serioussamtbe.js" "$out/serioussamtbe.wasm" "$DIST_DIR/$variant/"
 done
 
-# the page (tbo/, where it was before, only sends links there now), without what earlier builds
-# put there: The First Encounter's own page and engine, the page in tbo/, and the libraries and
-# torrents for WebTorrent and WebRTC
+# the page, without what earlier builds put there: The First Encounter's own page and engine, the
+# page in tbo/, the engine's earlier name, and the libraries and torrents for WebTorrent and WebRTC
 rm -rf "$DIST_DIR/tbo"
-rm -f "$DIST_DIR"/{jspi,asyncify}/serioussam.{js,wasm} "$DIST_DIR"/demo-files.json "$DIST_DIR"/demo.torrent \
+rm -f "$DIST_DIR"/{jspi,asyncify}/serioussam{,tbo}.{js,wasm} "$DIST_DIR"/demo-files.json "$DIST_DIR"/demo.torrent \
   "$DIST_DIR"/demo-page.torrent "$DIST_DIR"/demo-torrent.json "$DIST_DIR"/webtorrent.min.js "$DIST_DIR"/netplay-signal.js
 cp -R "$WEB_DIR/shell/"* "$DIST_DIR/"
 

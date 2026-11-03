@@ -4,10 +4,9 @@
 // says what is missing or wrong, puts each installation's files where the engine looks for them
 // (/data, The First Encounter's in /tfe, passed as +cdpath), keeps the group files in pieces in
 // the browser's storage, from where the engine reads them (also on the next visit), keeps its
-// files and options under the names they had when the page was at tbo/, and that links to tbo/
-// go to the page.
+// files and options under its own names, and that it deletes what earlier versions kept.
 //
-//   node tbo-page.mjs [--browser chromium|webkit|firefox]
+//   node tbe-page.mjs [--browser chromium|webkit|firefox]
 
 import { chromium, webkit, firefox } from 'playwright';
 import { serve } from './server.mjs';
@@ -19,7 +18,7 @@ import path from 'node:path';
 const argv = process.argv.slice(2);
 const browserIndex = argv.indexOf('--browser');
 const browserName = browserIndex >= 0 ? argv.splice(browserIndex, 2)[1] : 'chromium';
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sam-tbo-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sam-tbe-'));
 
 // a made-up installation: group files (real zip archives) and some loose files
 function install(folder, files) {
@@ -41,7 +40,7 @@ function install(folder, files) {
 const tseDir = install('Serious Sam Classic The Second Encounter', {
   'SE1_00.gro': 'the second encounter', 'SE1_00_Levels.gro': 'its levels',
   'Bin/SeriousSam.exe': 'not needed', 'Help/Readme.txt': 'not needed either',
-  // (TBO's own scripts are used, and mods aren't offered)
+  // (TBE's own scripts are used, and mods aren't offered)
   'Scripts/Game_startup.ini': 'sam_strFirstLevel = "Levels\\\\LevelsMP\\\\1_0_InTheLastEpisode.wld";', 'Mods/Warped/Warped3.gro': 'a mod',
 });
 const tfeDir = install('Serious Sam Classic The First Encounter', {
@@ -80,12 +79,12 @@ results['the page\'s names, the two demos, several .zip files can be picked'] =
   && await page.evaluate(() => document.getElementById('game-zip').multiple)
   && (await note(page)).includes('The Second Encounter') && (await note(page)).includes('The First Encounter');
 
-// its options, under the names they had at tbo/
-results['the options are kept as they were at tbo/'] =
+// its options, under its own names
+results['the options are kept under the page\'s names (tbe.)'] =
   await page.evaluate(() => document.getElementById('touch-mode').value) === 'auto';
 await page.selectOption('#touch-mode', 'off');
-results['the options are kept as they were at tbo/'] &&=
-  await page.evaluate(() => localStorage.getItem('tbo.touchControls') === 'off');
+results['the options are kept under the page\'s names (tbe.)'] &&=
+  await page.evaluate(() => localStorage.getItem('tbe.touchControls') === 'off');
 
 // what isn't the games
 await page.setInputFiles('#game-zip', otherZip);
@@ -111,7 +110,7 @@ const files = await page.evaluate(() => {
     base: exists('/data/SE1_10b.gro') && exists('/data/ModEXT.txt'),
     notNeeded: exists('/data/Bin/SeriousSam.exe') || exists('/data/Help/Readme.txt') || exists('/data/Mods/Warped/Warped3.gro')
       || exists('/tfe/Scripts/Menu/Options.cfg') || exists('/tfe/Controls/00-Default.ctl') || exists('/tfe/Demos/auto-demo0001.dem'),
-    // (TBO's own startup script, not the installation's, which would start The Second Encounter)
+    // (TBE's own startup script, not the installation's, which would start The Second Encounter)
     ownScripts: !new TextDecoder().decode(Module.FS.readFile('/data/Scripts/Game_startup.ini')).includes('1_0_InTheLastEpisode'),
     tfeNotInData: exists('/data/1_00c.gro'),
   };
@@ -119,11 +118,11 @@ const files = await page.evaluate(() => {
 results[`each installation's files are where the engine looks for them (${JSON.stringify(files)})`] =
   files.tse && files.tfe && files.base && !files.notNeeded && !files.tfeNotInData && files.inStorage && files.ownScripts;
 
-// kept in the page's store (as it was at tbo/), The First Encounter's under tfe/: the group
+// kept in the page's store, The First Encounter's under tfe/: the group
 // files in pieces, the others whole
 const storedKeys = (p, store) => p.evaluate(async (store) => {
   const db = await new Promise((resolve, reject) => {
-    const r = indexedDB.open('tbo-own-files');
+    const r = indexedDB.open('tbe-own-files');
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
   });
@@ -151,13 +150,13 @@ for (const l of log.filter((l) => /arguments|\.gro:/.test(l))) console.log(l);
 results['the engine is started with +cdpath /tfe/ and reads both installations\' group files'] =
   log.some((l) => l.includes('Starting with arguments: +cdpath /tfe/'))
   && log.some((l) => /\/data\/SE1_00\.gro: \d+ files/.test(l)) && log.some((l) => /\/tfe\/1_00c\.gro: \d+ files/.test(l));
-results['its settings and saved games are where they were at tbo/ (/tbo-user)'] =
-  (await databases(page)).includes('/tbo-user') && !(await databases(page)).includes('/user');
+results['its settings and saved games are in its storage (/tbe-user)'] =
+  (await databases(page)).includes('/tbe-user') && !(await databases(page)).includes('/user');
 
 // the next visit (the files count as kept once the game has run with them; these made-up
 // ones can't, so that is done here): the group files are read from their pieces again
 await page.evaluate(async () => {
-  const db = await new Promise((resolve) => { const r = indexedDB.open('tbo-own-files'); r.onsuccess = () => resolve(r.result); });
+  const db = await new Promise((resolve) => { const r = indexedDB.open('tbe-own-files'); r.onsuccess = () => resolve(r.result); });
   const files = ['SE1_00.gro', 'SE1_00_Levels.gro', 'tfe/1_00c.gro', 'tfe/1_00_music.gro']
     .map((path) => ({ path, size: GameArchives.size(GameArchives.open(`/${path.startsWith('tfe/') ? '' : 'data/'}${path}`)), chunked: true }))
     .concat([{ path: 'tfe/Levels/01_Hatshepsut.wld', size: 13 }]);
@@ -189,7 +188,7 @@ await unfinished.goto(`${server.url}/index.html`);
 const removedUnfinished = await unfinished.evaluate(async () => {
   // (a set started over an hour ago, never finished: no list of files)
   const db = await new Promise((resolve) => {
-    const r = indexedDB.open('tbo-own-files', 2);
+    const r = indexedDB.open('tbe-own-files', 2);
     r.onupgradeneeded = () => ['files', 'meta', 'chunks'].forEach((n) => { if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n, n === 'files' ? { keyPath: 'path' } : undefined); });
     r.onsuccess = () => resolve(r.result);
   });
@@ -205,7 +204,7 @@ await unfinished.reload();
 await unfinished.waitForFunction(() => window.engineLog.some((l) => /never started with were deleted/.test(l)), null, { timeout: 10000 })
   .catch(() => {});
 results['files the game never started with are deleted on the next visit'] = removedUnfinished
-  && !(await databases(unfinished)).includes('tbo-own-files') && !await unfinished.isVisible('#play-own');
+  && !(await databases(unfinished)).includes('tbe-own-files') && !await unfinished.isVisible('#play-own');
 await unfinished.close();
 
 // one .zip with both folders
@@ -223,14 +222,20 @@ results['one .zip with both folders is taken'] = await page2.evaluate(() => {
 results['network games go through the page\'s server'] = await page2.evaluate(() =>
   fetch('net-hub.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).then(({ hub }) => hub === '/hub', () => false));
 
-// links to where the page was before (e.g. a network game's room) go to it
-const moved = await context.newPage();
-await moved.goto(`${server.url}/tbo/?join=K7Q2MX`);
-await moved.waitForURL((url) => !url.pathname.includes('/tbo/'), { timeout: 10000 }).catch(() => {});
-const movedTo = new URL(moved.url());
-results[`links to tbo/ go to the page (${movedTo.pathname}${movedTo.search})`] = movedTo.pathname === '/'
-  && movedTo.search === '?join=K7Q2MX';
-await moved.close();
+// what earlier versions of the page kept is deleted, apart from saved games
+const old = await browser.newContext();
+const before = await old.newPage();
+await before.goto(`${server.url}/net-hub.json`);
+await before.evaluate(() => Promise.all(['tbo-own-files', 'sam-demo-0123', 'tbo-demo-4567', '/tbo-user']
+  .map((name) => new Promise((resolve) => { const r = indexedDB.open(name); r.onsuccess = () => { r.result.close(); resolve(); }; }))));
+const later = await old.newPage();
+await later.goto(`${server.url}/index.html`);
+await later.waitForFunction(async () => !(await indexedDB.databases()).some((d) => d.name === 'tbo-own-files'), null, { timeout: 10000 })
+  .catch(() => {});
+const left = await databases(later);
+results[`what earlier versions kept is deleted, saved games stay (${left.join(' ')})`] = !left.includes('tbo-own-files')
+  && !left.some((name) => /^(sam|tbo)-demo-/.test(name)) && left.includes('/tbo-user');
+await old.close();
 
 await browser.close();
 await server.close();

@@ -51,8 +51,7 @@ requests (a demo download that stopped goes on from where it was).
 3. the game is at `https://<user>.github.io/<repository>/`.
 
 All files are below Pages' 100 MB limit (the largest is The Second Encounter demo's 84 MB
-`SEDemo1_00.gro`), and everything is loaded with relative URLs. The game was at `tbo/` before:
-`tbo/index.html` sends links there (e.g. to a network game's room) to the page.
+`SEDemo1_00.gro`), and everything is loaded with relative URLs.
 
 ## Both games
 
@@ -80,19 +79,21 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   waits for the pieces from IndexedDB, yielding to the browser as it does every frame (JSPI or
   Asyncify). Other files (scripts, loose levels) are in memory, and so is the music track that
   is playing, when it is an .mp3 (its decoder reads files itself).
-- **Its storage** keeps the names it had at `tbo/` (so what players kept there stays): game
-  files in `tbo-own-files`, settings and saved games in `/tbo-user`, the start page's options
-  (`tbo.` prefix), the service worker's cache (`tbo-app`), and network games' room names
-  (`tbo-` prefix).
-- **Tests**: `web/test/tbo-page.mjs` checks the page with made-up installations, and
+- **Its storage:** game files in `tbe-own-files`, the demos in `tbe-demo-tfe-…` and
+  `tbe-demo-tse-…`, settings and saved games in `/tbe-user`, the start page's options (`tbe.`
+  prefix), the service worker's cache (`tbe-app`), and network games' room names (`tbe-`
+  prefix). What earlier versions kept under other names (`tbo-…`, `sam-…`: game files, demos,
+  caches) is deleted when the page starts; their saved games are left alone (`oldDatabases` and
+  so on in `shell/config.js`).
+- **Tests**: `web/test/tbe-page.mjs` checks the page with made-up installations, and
   `web/test/ownfiles.mjs` with the two demos as installations; `web/test/archive-reader.mjs`
   reads every file of The First Encounter's demo's group files from IndexedDB through the
   engine's reader (a test program, `SamTBE/Sources/Tests/ArchiveReaderTest.cpp`) with a small
-  cache, in both builds; `web/test/tbo-demos.mjs` plays the demos (Custom Level, Karnak,
+  cache, in both builds; `web/test/tbe-demos.mjs` plays the demos (Custom Level, Karnak,
   give-all, its end, then Palenque). With real installations,
-  `TBO_TSE_ZIP=… TBO_TFE_ZIP=… node web/test/tbo-levels.mjs` starts each level of both games
+  `TBE_TSE_ZIP=… TBE_TFE_ZIP=… node web/test/tbe-levels.mjs` starts each level of both games
   and reports what the engine says about it, and lists the files both have with different
-  contents; `tbo-handoff.mjs` plays The First Encounter's end and The Second Encounter's start.
+  contents; `tbe-handoff.mjs` plays The First Encounter's end and The Second Encounter's start.
 
 ## How it works
 
@@ -109,19 +110,19 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   (fixed function state turned into generated shaders, client side vertex arrays
   streamed into buffers, occlusion queries instead of depth buffer reads for lens flares).
 - **Files.** Game data is in `/data` and `/tfe` (see [Both games](#both-games)), with the base
-  package's files under them; settings and saved games are in `/tbo-user`, which is stored in
+  package's files under them; settings and saved games are in `/tbe-user`, which is stored in
   IndexedDB. Players give their installations as .zip files of their folders (picking folders
   doesn't work on phones); `shell/zip.js` reads only the zip's directory up front and unpacks the files
   the game needs one by one with the browser's `DecompressionStream`. Dropping the folder
   itself on the page works too. Each `.gro` file is checked on the way in (they are zip
   archives too), so a damaged or cut short one is named before the game starts.
-  The player's files are also kept in IndexedDB (`tbo-own-files`), and counted as kept
+  The player's files are also kept in IndexedDB (`tbe-own-files`), and counted as kept
   only once the game has started with them; on later visits *Play my game files* uses them.
 - **When the game can't start**, the page says what happened (with the engine's message
   under "What the game said") and what to try, with *Start over*, *Clear assets* and
   *Clear my data* (both also on the start page). Each deletes, after asking, only its part
   of what this page keeps. *Clear assets…*: the demos' pieces, the cached base game package
-  and the player's kept game files. *Clear my data…*: settings and saved games (`/tbo-user`)
+  and the player's kept game files. *Clear my data…*: settings and saved games (`/tbe-user`)
   and the start page's options. Other sites on the same address (e.g. a `github.io`
   account's other projects) are left alone.
   Settings are saved whenever the page is hidden, since a tab can be closed at any time.
@@ -289,9 +290,9 @@ node pwa.mjs          # installable app: manifest, service worker, starting offl
 node demo-download.mjs  # the demos' download: from the site, from IndexedDB, on after it stopped, from mirrors
 node netplay.mjs      # network games: hosting, joining by code, leaving, a site without a hub
 node netplay-browsers.mjs  # network games between WebKit, Firefox and Chromium
-node tbo-page.mjs     # the page with made-up installations of both games
+node tbe-page.mjs     # the page with made-up installations of both games
 node archive-reader.mjs  # the engine's reader of group files kept in IndexedDB
-node tbo-demos.mjs    # the demos: Custom Level, Karnak, give-all, its end, then Palenque (--browser webkit)
+node tbe-demos.mjs    # the demos: Custom Level, Karnak, give-all, its end, then Palenque (--browser webkit)
 node escape.mjs       # Escape with the mouse captured (opens a browser window; not part of npm test)
 node run.mjs --args "+level Levels/KarnakDemo.wld" --seconds 30 --shots 10,20 --out /tmp/shots
 node demo-frames.mjs --frames 30,90 --native <native>/ScreenShots   # compare with a native build

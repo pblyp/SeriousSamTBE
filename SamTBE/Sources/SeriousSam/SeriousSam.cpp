@@ -186,7 +186,7 @@ CTString sam_strModName = TRANS("-   T H E  B O T H  E N C O U N T E R S   -");
 // "Levels\\LevelsMP\\1_0_InTheLastEpisode.wld" at its end, see CPlayer::FirstEncounterEnd())
 CTString sam_strFirstLevel = "Levels\\01_Hatshepsut.wld";
 CTString sam_strIntroLevel = "Levels\\LevelsMP\\Intro.wld";
-CTString sam_strGameName = "serioussamtbo";
+CTString sam_strGameName = "serioussamtbe";
 
 CTString sam_strTechTestLevel = "Levels\\LevelsMP\\Technology\\TechTest.wld";
 CTString sam_strTrainingLevel = "Levels\\KarnakDemo.wld";

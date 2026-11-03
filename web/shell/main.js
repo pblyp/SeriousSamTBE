@@ -925,6 +925,19 @@
   }
   showStoredFiles();
 
+  // what earlier versions of the page kept under other names (see config.js): the big things go
+  async function deleteOldData() {
+    const names = [...Game.oldDatabases];
+    if (indexedDB.databases) {
+      for (const { name } of await indexedDB.databases()) {
+        if (name && Game.oldDatabasePrefixes.some((prefix) => name.startsWith(prefix))) names.push(name);
+      }
+    }
+    await Promise.all(names.map(deleteDatabase));
+    if (window.caches) await Promise.all(Game.oldCaches.map((name) => caches.delete(name)));
+  }
+  deleteOldData().catch(() => {});
+
   // ---------------------------------------------------------------- page events
 
   playDemoButton.addEventListener('click', loadDemos);

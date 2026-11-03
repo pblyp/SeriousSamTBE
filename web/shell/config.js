@@ -5,20 +5,20 @@
 // second data folder, +cdpath) or both games' demos. Also read by sw.js.
 self.GameConfig = {
   // the engine: <jspi|asyncify>/<engine>.js and .wasm
-  engine: 'serioussamtbo',
+  engine: 'serioussamtbe',
   // the two games' demos, played one after the other as the campaign is (Karnak, then Palenque):
   // the folder each one is in (demo/<folder>/, with its demo-files.json, see demo-download.js),
   // where its files go, the start of its IndexedDB databases' names, and what isn't taken
   demos: [
-    { name: 'The First Encounter\'s demo', folder: 'tfe', root: '/tfe/', prefix: 'sam-demo-',
+    { name: 'The First Encounter\'s demo', folder: 'tfe', root: '/tfe/', prefix: 'tbe-demo-tfe-',
       skip: /^(scripts|controls|data|demos|mods|postinstall)\//i },
-    { name: 'The Second Encounter\'s demo', folder: 'tse', root: '/data/', prefix: 'tbo-demo-',
+    { name: 'The Second Encounter\'s demo', folder: 'tse', root: '/data/', prefix: 'tbe-demo-tse-',
       skip: /^(scripts|mods)\//i },
   ],
   // the installations the player's game files come from, told apart by their group files (The
   // Second Encounter's demo counts as its installation): where the page puts each one's files,
   // the prefix of their names among the game files kept in this browser, and what isn't taken:
-  // TBO's own scripts are used (The Second Encounter's would start its campaign), mods aren't
+  // TBE's own scripts are used (The Second Encounter's would start its campaign), mods aren't
   // offered, and of The First Encounter's (the engine's second data folder) only its game data
   // is read
   installs: [
@@ -29,11 +29,16 @@ self.GameConfig = {
   ],
   // engine arguments for them
   args: ['+cdpath', '/tfe/'],
-  // what the page keeps in this browser (the names it had at /tbo/, so what players kept there stays)
-  ownFilesDb: 'tbo-own-files',
-  userDir: '/tbo-user',
-  optionPrefix: 'tbo.',
-  cache: 'tbo-app',
+  // what the page keeps in this browser
+  ownFilesDb: 'tbe-own-files',
+  userDir: '/tbe-user',
+  optionPrefix: 'tbe.',
+  cache: 'tbe-app',
+  // what earlier versions of the page kept, deleted when it starts (the player's game files and the
+  // demos, which take much room; their saved games stay): databases, and the starts of their names
+  oldDatabases: ['tbo-own-files', 'sam-own-files'],
+  oldDatabasePrefixes: ['sam-demo-', 'tbo-demo-'],
+  oldCaches: ['tbo-app', 'sam-app'],
   // network games: the prefix of room names
-  netRoomPrefix: 'tbo-',
+  netRoomPrefix: 'tbe-',
 };

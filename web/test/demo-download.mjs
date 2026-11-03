@@ -28,7 +28,7 @@ const results = {};
 const errors = [];
 
 // the demos, as config.js has them
-const demos = [['tfe', 'sam-demo-'], ['tse', 'tbo-demo-']].map(([folder, prefix]) => ({ folder, prefix,
+const demos = [['tfe', 'tbe-demo-tfe-'], ['tse', 'tbe-demo-tse-']].map(([folder, prefix]) => ({ folder, prefix,
   ...JSON.parse(fs.readFileSync(path.join(DIST, 'demo', folder, 'demo-files.json'))) }));
 const DEMO_BYTES = demos.reduce((sum, demo) => sum + demo.files.reduce((n, file) => n + file.size, 0), 0);
 // the biggest file (The Second Encounter's): the one cut short; the files after it aren't
@@ -64,7 +64,7 @@ async function openPage(query, { context = null, cutShort = false, origin = serv
     await page.route((url) => url.pathname === `/demo/${cut.folder}/${biggest.path}`, (route) => route.fulfill({ status: 200, body: bytes }));
   }
   // a stand-in for the engine, which only takes the files
-  await page.route(/serioussamtbo\.js$/, (route) => route.fulfill({ contentType: 'text/javascript', body: `
+  await page.route(/serioussamtbe\.js$/, (route) => route.fulfill({ contentType: 'text/javascript', body: `
     Module.FS = { mkdirTree() {}, writeFile() {} };
     Module.callMain = () => {};
     Module.ExitStatus = class {};

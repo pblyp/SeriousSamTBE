@@ -2,10 +2,10 @@
 // First Encounter's first level, and at The First Encounter's end its credits roll (Fire skips
 // them), then The Second Encounter's first level follows, with the weapons the player has.
 // The ending is started with dbg_bFirstEncounterEnd (the last level's own markers, from where its
-// credits start), as playing there takes too long. Screenshots in web/build/tbo-handoff-*.png.
+// credits start), as playing there takes too long. Screenshots in web/build/tbe-handoff-*.png.
 //
-//   TBO_TSE_ZIP=<.zip of The Second Encounter's folder> TBO_TFE_ZIP=<.zip of The First
-//   Encounter's folder> node tbo-handoff.mjs [--browser chromium|webkit]
+//   TBE_TSE_ZIP=<.zip of The Second Encounter's folder> TBE_TFE_ZIP=<.zip of The First
+//   Encounter's folder> node tbe-handoff.mjs [--browser chromium|webkit]
 
 import { chromium, webkit } from 'playwright';
 import { serve } from './server.mjs';
@@ -14,12 +14,12 @@ import fs from 'node:fs';
 const argv = process.argv.slice(2);
 const browserIndex = argv.indexOf('--browser');
 const browserName = browserIndex >= 0 ? argv.splice(browserIndex, 2)[1] : 'chromium';
-const zips = process.env.TBO_ZIP ? [process.env.TBO_ZIP] : [process.env.TBO_TSE_ZIP, process.env.TBO_TFE_ZIP];
+const zips = process.env.TBE_ZIP ? [process.env.TBE_ZIP] : [process.env.TBE_TSE_ZIP, process.env.TBE_TFE_ZIP];
 if (zips.some((z) => !z || !fs.existsSync(z))) {
-  console.log('Give the installations\' .zip files: TBO_TSE_ZIP and TBO_TFE_ZIP (or TBO_ZIP with both folders).');
+  console.log('Give the installations\' .zip files: TBE_TSE_ZIP and TBE_TFE_ZIP (or TBE_ZIP with both folders).');
   process.exit(2);
 }
-const shot = (page, name) => page.screenshot({ path: new URL(`../build/tbo-handoff-${name}.png`, import.meta.url).pathname });
+const shot = (page, name) => page.screenshot({ path: new URL(`../build/tbe-handoff-${name}.png`, import.meta.url).pathname });
 const engineLog = (page) => page.evaluate(() => window.engineLog);
 const waitLog = (page, re, timeout = 120000) => page.waitForFunction((source) => window.engineLog.some((l) => new RegExp(source).test(l)),
   re.source, { timeout }).then(() => true, () => false);
@@ -97,5 +97,5 @@ for (const [what, passed] of Object.entries(results)) {
   ok &&= passed;
 }
 console.log(ok ? 'PASS' : 'FAIL');
-console.log('Screenshots: web/build/tbo-handoff-*.png');
+console.log('Screenshots: web/build/tbe-handoff-*.png');
 process.exit(ok ? 0 : 1);

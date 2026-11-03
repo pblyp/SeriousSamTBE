@@ -32,11 +32,11 @@ const runs = [['chromium', 'jspi'], ['chromium', 'asyncify'], ['webkit', 'asynci
 
 // the test program, built next to the engine (it is left out of the usual build)
 for (const variant of new Set(runs.map(([, v]) => v))) {
-  const out = path.join(buildDir, `wasm-tbo-${variant}`);
+  const out = path.join(buildDir, `wasm-tbe-${variant}`);
   try {
     execFileSync('cmake', ['--build', out, '--target', 'ArchiveReaderTest'], { stdio: 'pipe' });
   } catch (e) {
-    console.log(`Cannot build the test program in ${out} (build TBO for the web first, with emsdk activated):`);
+    console.log(`Cannot build the test program in ${out} (build TBE for the web first, with emsdk activated):`);
     console.log(String(e.stdout || e.message).slice(-2000));
     process.exit(1);
   }
@@ -59,7 +59,7 @@ for (const [name, variant] of runs) {
       return route.fulfill({ contentType: 'text/html', body: '<!doctype html><script src="archives.js"></script>' });
     }
     const source = file === 'archives.js' ? path.resolve(here, '../shell/archives.js')
-      : path.join(buildDir, `wasm-tbo-${variant}`, path.basename(file));
+      : path.join(buildDir, `wasm-tbe-${variant}`, path.basename(file));
     return route.fulfill({ path: source,
       contentType: file.endsWith('.wasm') ? 'application/wasm' : 'text/javascript' });
   });

@@ -142,7 +142,7 @@ if (offered) {
 // clearing the assets keeps the player's data, and the other way round
 await page.reload();
 await page.waitForSelector('#play-own:not([hidden])', { timeout: 10000 }).catch(() => {});
-await page.evaluate(() => localStorage.setItem('tbo.touchControls', 'off'));
+await page.evaluate(() => localStorage.setItem('tbe.touchControls', 'off'));
 let before = await pageDatabases(page);
 page.once('dialog', (dialog) => dialog.dismiss());
 await page.click('#clear-assets');
@@ -152,8 +152,8 @@ await page.click('#clear-assets');
 await page.waitForFunction(() => document.getElementById('purge-status').textContent !== '');
 let after = await pageDatabases(page);
 results[`clearing the assets asks first, keeps settings and saved games (${before} -> ${after || 'none'})`] = keptWhenCancelled
-  && before.includes('tbo-own-files') && !after.includes('tbo-own-files') && !after.includes('EM_PRELOAD_CACHE')
-  && after.includes('/tbo-user') && await page.evaluate(() => localStorage.getItem('tbo.touchControls') === 'off')
+  && before.includes('tbe-own-files') && !after.includes('tbe-own-files') && !after.includes('EM_PRELOAD_CACHE')
+  && after.includes('/tbe-user') && await page.evaluate(() => localStorage.getItem('tbe.touchControls') === 'off')
   && !await page.isVisible('#play-own');
 before = after;
 page.once('dialog', (dialog) => dialog.accept());
@@ -161,8 +161,8 @@ await page.click('#clear-data');
 await page.waitForFunction(() => document.getElementById('purge-status').textContent.includes('data'));
 after = await pageDatabases(page);
 results[`clearing my data removes settings and saved games and resets the options (${before} -> ${after || 'none'})`] =
-  before.includes('/tbo-user') && !after.includes('/tbo-user')
-  && await page.evaluate(() => localStorage.getItem('tbo.touchControls') === null && document.getElementById('touch-mode').value === 'auto');
+  before.includes('/tbe-user') && !after.includes('/tbe-user')
+  && await page.evaluate(() => localStorage.getItem('tbe.touchControls') === null && document.getElementById('touch-mode').value === 'auto');
 
 // broken game files: the page says what is wrong and what to do
 async function failWith(zips) {
@@ -196,14 +196,14 @@ await failing.waitForSelector('#play-demo');
 await failing.waitForTimeout(500);
 after = await pageDatabases(failing);
 results[`files the game didn't start with aren't offered, and clearing the assets from the error removes them (${before} -> ${after || 'none'})`] =
-  !await failing.isVisible('#play-own') && before.includes('tbo-own-files') && !after.includes('tbo-own-files') && after.includes('/tbo-user');
+  !await failing.isVisible('#play-own') && before.includes('tbe-own-files') && !after.includes('tbe-own-files') && after.includes('/tbe-user');
 await failing.close();
 failing = await failWith([notTheGameZip, finderZip]);
 failing.once('dialog', (dialog) => dialog.accept());
 await failing.click('#error-clear-data');
 await failing.waitForSelector('#play-demo');
 await failing.waitForTimeout(500);
-results['clearing my data from the error removes settings and saved games'] = !(await pageDatabases(failing)).includes('/tbo-user');
+results['clearing my data from the error removes settings and saved games'] = !(await pageDatabases(failing)).includes('/tbe-user');
 await failing.close();
 
 await browser.close();

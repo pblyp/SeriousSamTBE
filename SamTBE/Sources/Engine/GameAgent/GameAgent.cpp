@@ -139,7 +139,7 @@ typedef struct sockaddr    SOCKADDR;
 #define SERIOUSSAMSTR       "serioussam"
 #else
 // (not The Second Encounter's name: its players couldn't join these games)
-#define SERIOUSSAMSTR       "serioussamtbo"
+#define SERIOUSSAMSTR       "serioussamtbe"
 #endif
 
 #include <Engine/GameAgent/MSLegacy.h>
@@ -462,9 +462,9 @@ void _sendHeartbeat(INDEX iChallenge)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbe", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamtbo\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbe\n", _datetime);
     #endif
   }
   _sendPacket(strPacket);
@@ -509,9 +509,9 @@ extern void GameAgent_ServerInit(void)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbe", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamtbo\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbe\n", _datetime);
     #endif
     _sendPacketB(strPacket);
   }
@@ -531,9 +531,9 @@ extern void GameAgent_ServerEnd(void)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\\statechanged\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbe\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamtbo\\statechanged\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbe\\statechanged\n", _datetime);
     #endif
     _sendPacket(strPacket);
   }
@@ -825,9 +825,9 @@ extern void GameAgent_ServerStateChanged(void)
     DateTime(_datetime);
     CPrintF("[%s] Send heartbeat - serioussam\\statechanged\n", _datetime);
     #else
-    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbo\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
+    strPacket.PrintF("\\heartbeat\\%hu\\gamename\\serioussamtbe\\statechanged", (_pShell->GetINDEX("net_iPort") + 1));
     DateTime(_datetime);
-    CPrintF("[%s] Send heartbeat - serioussamtbo\\statechanged\n", _datetime);
+    CPrintF("[%s] Send heartbeat - serioussamtbe\\statechanged\n", _datetime);
     #endif
     _sendPacket(strPacket);
   }
@@ -1609,7 +1609,7 @@ void*        _MS_Thread(void *arg) {
             #ifdef FIRST_ENCOUNTER  // First Encounter
             sPch = strstr(_szBuffer, "\\gamename\\serioussam\\");
             #else
-            sPch = strstr(_szBuffer, "\\gamename\\serioussamtbo\\");
+            sPch = strstr(_szBuffer, "\\gamename\\serioussamtbe\\");
             #endif
             if(!sPch) {
                 DateTime(_datetime);
@@ -1823,7 +1823,7 @@ void*        _LocalNet_Thread(void *arg) {
             #ifdef FIRST_ENCOUNTER  // First Encounter
             sPch = strstr(_szBuffer, "\\gamename\\serioussam\\");
             #else
-            sPch = strstr(_szBuffer, "\\gamename\\serioussamtbo\\");
+            sPch = strstr(_szBuffer, "\\gamename\\serioussamtbe\\");
             #endif
             if(!sPch) {
                 DateTime(_datetime);

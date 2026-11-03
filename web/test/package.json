@@ -6,7 +6,7 @@
     "smoke": "node smoke.mjs",
     "persistence": "node persistence.mjs",
     "ownfiles": "node ownfiles.mjs",
-    "test": "node smoke.mjs && node persistence.mjs && node ownfiles.mjs && node touch.mjs && node gamepad.mjs && node mobile.mjs && node demo-download.mjs && node pwa.mjs && node netplay.mjs && node netplay-browsers.mjs && node tbo-page.mjs && node archive-reader.mjs && node tbo-demos.mjs",
+    "test": "node smoke.mjs && node persistence.mjs && node ownfiles.mjs && node touch.mjs && node gamepad.mjs && node mobile.mjs && node demo-download.mjs && node pwa.mjs && node netplay.mjs && node netplay-browsers.mjs && node tbe-page.mjs && node archive-reader.mjs && node tbe-demos.mjs",
     "touch": "node touch.mjs",
     "gamepad": "node gamepad.mjs",
     "mobile": "node mobile.mjs",
@@ -14,10 +14,10 @@
     "pwa": "node pwa.mjs",
     "netplay": "node netplay.mjs",
     "netplay-browsers": "node netplay-browsers.mjs",
-    "tbo-page": "node tbo-page.mjs",
+    "tbe-page": "node tbe-page.mjs",
     "archive-reader": "node archive-reader.mjs",
-    "tbo-demos": "node tbo-demos.mjs",
-    "tbo-levels": "node tbo-levels.mjs"
+    "tbe-demos": "node tbe-demos.mjs",
+    "tbe-levels": "node tbe-levels.mjs"
   },
   "devDependencies": {
     "playwright": "^1.50.0",
