@@ -355,6 +355,8 @@ static INDEX cht_bGiveAll    = FALSE;
 static INDEX cht_bOpen       = FALSE;
 static INDEX cht_bAllMessages= FALSE;
 static INDEX cht_bRefresh    = FALSE;
+static INDEX cht_bGiveSeriousBomb = FALSE;
+static INDEX cht_bGivePowerUps    = FALSE;
 INDEX cht_bGod        = FALSE;
 INDEX cht_bFly        = FALSE;
 INDEX cht_bGhost      = FALSE;
@@ -829,6 +831,8 @@ void CPlayer_OnInitClass(void)
   _pShell->DeclareSymbol("user INDEX cht_bAllMessages;", (void *) &cht_bAllMessages);
   _pShell->DeclareSymbol("user FLOAT cht_fTranslationMultiplier ;", (void *) &cht_fTranslationMultiplier);
   _pShell->DeclareSymbol("user INDEX cht_bRefresh;", (void *) &cht_bRefresh);
+  _pShell->DeclareSymbol("user INDEX cht_bGiveSeriousBomb;", (void *) &cht_bGiveSeriousBomb);
+  _pShell->DeclareSymbol("user INDEX cht_bGivePowerUps;", (void *) &cht_bGivePowerUps);
   // this one is masqueraded cheat enable variable
   _pShell->DeclareSymbol("INDEX cht_bEnable;", (void *) &cht_bEnable);
 
@@ -4979,6 +4983,31 @@ functions:
     if (cht_bRefresh) {
       cht_bRefresh = FALSE;
       SetHealth(TopHealth());
+    }
+
+    // a Serious Bomb, as when one is picked up (no more than one can carry)
+    if (cht_bGiveSeriousBomb) {
+      cht_bGiveSeriousBomb = FALSE;
+      if (m_iSeriousBombCount>=3) {
+        CPrintF(TRANSV("You can't carry more Serious Bombs\n"));
+      } else {
+        EPowerUp ePowerUp;
+        ePowerUp.puitType = PUIT_BOMB;
+        ReceiveItem(ePowerUp);
+        CPrintF("Serious Bombs: %d\n", m_iSeriousBombCount);
+      }
+    }
+
+    // all the power-ups, as when they are picked up (for their whole time)
+    if (cht_bGivePowerUps) {
+      cht_bGivePowerUps = FALSE;
+      // (PUIT_INVISIB, PUIT_INVULNER, PUIT_DAMAGE, PUIT_SPEED)
+      for (INDEX iPowerUp=PUIT_INVISIB; iPowerUp<=PUIT_SPEED; iPowerUp++) {
+        EPowerUp ePowerUp;
+        ePowerUp.puitType = (PowerUpItemType)iPowerUp;
+        ReceiveItem(ePowerUp);
+      }
+      CPrintF("Power-ups: invisibility, invulnerability, serious damage, serious speed\n");
     }
   };
 

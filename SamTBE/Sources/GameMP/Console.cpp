@@ -377,6 +377,12 @@ static void Key_Return(void)
 
     } else if (strEditingLine=="refresh") {
       DoCheat(strEditingLine, "cht_bRefresh");
+
+    } else if (strEditingLine=="pow") {
+      DoCheat(strEditingLine, "cht_bGiveSeriousBomb");
+
+    } else if (strEditingLine=="star") {
+      DoCheat(strEditingLine, "cht_bGivePowerUps");
     } else {
       CPrintF("sorry?\n");
     }

@@ -59,6 +59,10 @@ Playing
   B ducks, LB/RB (or the D-pad) change weapons, Y flips to the last weapon, Back opens
   NETRICSA and Start the menu. In the menus the D-pad or left stick moves, A chooses and
   B goes back.
+- **Cheats** (single player): in the console (<kbd>~</kbd>), `please god`, `please giveall`,
+  `please killall`, `please open`, `please tellall`, `please fly`, `please ghost`,
+  `please invisible`, `please refresh`, `please pow` (a Serious Bomb) and `please star`
+  (all power-ups).
 - **Aim assist:** shots go to an enemy next to the crosshair. It is on with touch controls
   or a gamepad, and can be switched on or off for good in Options → Players and
   controls → Customize controls → Aim assist.
