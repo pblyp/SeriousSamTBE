@@ -9,9 +9,11 @@ playable in a web browser on computers and phones.
 **Play it: <https://pblyp.github.io/SeriousSamTBE/>**
 
 - **One campaign.** It runs The Second Encounter's code, which also plays The First
-  Encounter's levels: when they end, its credits roll and The Second Encounter's first level
-  follows, with your weapons. Both games' deathmatch maps are there too (e.g. Desert Temple),
-  with The Second Encounter's weapons.
+  Encounter's levels: when they end, its ending and credits play (Fire skips them) and The
+  Second Encounter follows, with the starting weapons as in a new game: in single player with
+  its recap of the story so far, in cooperative games straight from its first level. Both
+  games' deathmatch maps are there too (e.g. Desert Temple), with The Second Encounter's
+  weapons.
 - **The demos, out of the box.** The official demos of both games (Karnak, then Palenque;
   about 120 MB) are downloaded once and kept in the browser.
 - **The full games, with your own copies.** Zip the folders where both games are installed

@@ -2417,16 +2417,19 @@ functions:
     return (ctLines+24)/2.0f;
   }
 
-  // where The Second Encounter starts, after The First Encounter's end: its first level, or with
-  // the demos, its demo's (Palenque)
+  // where The Second Encounter starts, after The First Encounter's end: in single player its recap
+  // of the story so far ("In the last episode", which goes on to its first level), in cooperative
+  // games its first level (the recap, like the intro, is a single player's cinematic: its level is
+  // for single player only), and with the demos its demo's (Palenque)
   CTFileName SecondEncounterFirstLevel(void)
   {
-    const CTFileName fnmFirst = CTFILENAME("Levels\\LevelsMP\\1_0_InTheLastEpisode.wld");
+    const CTFileName fnmRecap = CTFILENAME("Levels\\LevelsMP\\1_0_InTheLastEpisode.wld");
+    const CTFileName fnmFirst = CTFILENAME("Levels\\LevelsMP\\1_1_Palenque.wld");
     const CTFileName fnmDemo = CTFILENAME("Levels\\LevelsMP\\Demo\\Palenque_Demo.wld");
     if (!FileExists(fnmFirst) && FileExists(fnmDemo)) {
       return fnmDemo;
     }
-    return fnmFirst;
+    return GetSP()->sp_bSinglePlayer ? fnmRecap : fnmFirst;
   }
 
   void UpdateLevelStats(void)
@@ -3992,9 +3995,9 @@ functions:
       Cheats();
     }
 
-    // (for testing The First Encounter's end in single player: its last level's ending, from where
-    // its credits start)
-    if (dbg_bFirstEncounterEnd==2 && GetSP()->sp_bSinglePlayer && (GetFlags()&ENF_ALIVE) && m_penActionMarker==NULL) {
+    // (for testing The First Encounter's end in single player and cooperative games: its last
+    // level's ending, from where its credits start)
+    if (dbg_bFirstEncounterEnd==2 && GetSP()->sp_bCooperative && !IsPredictor() && (GetFlags()&ENF_ALIVE) && m_penActionMarker==NULL) {
       dbg_bFirstEncounterEnd = FALSE;
       CEntity *penTrigger = _pNetwork->GetEntityWithName("Trigger: Beam sequence", 0);
       if (penTrigger==NULL) {
@@ -4005,7 +4008,7 @@ functions:
         SendToTarget(penTrigger, EET_TRIGGER, this);
       }
     }
-    if (dbg_bFirstEncounterEnd && GetSP()->sp_bSinglePlayer && (GetFlags()&ENF_ALIVE) && m_penActionMarker==NULL) {
+    if (dbg_bFirstEncounterEnd && GetSP()->sp_bCooperative && !IsPredictor() && (GetFlags()&ENF_ALIVE) && m_penActionMarker==NULL) {
       dbg_bFirstEncounterEnd = FALSE;
       CEntity *penStart = FirstEncounterEndMarker();
       if (penStart!=NULL) {
@@ -6179,8 +6182,9 @@ procedures:
     _SwcWorldChange.strGroup = "";
     _SwcWorldChange.plLink = GetPlacement();
     _SwcWorldChange.iType = (INDEX)WLT_FIXED;
-    CPrintF("The First Encounter's end: The Second Encounter follows\n");
-    _pNetwork->ChangeLevel(SecondEncounterFirstLevel(), FALSE, 0);
+    const CTFileName fnmNext = SecondEncounterFirstLevel();
+    CPrintF("The First Encounter's end: The Second Encounter follows (%s)\n", (const char *)fnmNext);
+    _pNetwork->ChangeLevel(fnmNext, FALSE, 0);
     return EReturn();
   };
 
