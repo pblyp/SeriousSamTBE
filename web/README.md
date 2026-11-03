@@ -167,6 +167,14 @@ All files are below Pages' 100 MB limit (the largest is The Second Encounter dem
   Only the official demos' files are downloaded from the site, which to our knowledge may be
   freely redistributed; the start page explains this to players. Files from a player's own
   installations never leave their device.
+- **What the page is doing.** The loading view has a line of details under the progress bar:
+  how much of a download is done and how fast it goes, which file is being prepared, and when
+  a request failed, what happens now (asked again, or from the next source). The engine's
+  download (its `.wasm`, fetched by its script) is shown as it goes, passed on as a stream so
+  the browser still compiles it as it arrives, then "Starting the game engine…". After *Start*,
+  the view stays until the engine's main loop runs, with the engine's latest console line. When
+  nothing has changed for 5 s, the details say so, counting the seconds ("waiting for data ·
+  12 s", "still working · 7 s"), so a long step doesn't look like a hang.
 - **Installing as an app (PWA).** `shell/manifest.webmanifest` (fullscreen, landscape,
   icons made from `SamTFE/serioussam.png`) and the service worker `shell/sw.js` make the
   page installable; Chromium also gets an *Install the app* button on the start page. The

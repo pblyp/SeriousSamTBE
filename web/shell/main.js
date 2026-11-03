@@ -33,6 +33,7 @@
   const loadingEl = document.getElementById('loading');
   const statusEl = document.getElementById('status');
   const progressEl = document.getElementById('progress');
+  const statusDetailEl = document.getElementById('status-detail');
   const playDemoButton = document.getElementById('play-demo');
   const playOwnButton = document.getElementById('play-own');
   const playOwnNote = document.getElementById('play-own-note');
@@ -58,6 +59,10 @@
   function log(text) {
     engineLog.push(text);
     console.log(text);
+    // (what the engine is doing while it starts, see start())
+    if (startingGame && text.trim()) {
+      setStatus('Starting the game…', undefined, text.trim().slice(0, 100));
+    }
     // (a network game that refused this player's game files)
     if (/Wrong CRC check/.test(text)) {
       explainFilesRefused();
@@ -71,17 +76,55 @@
     }
   }
 
-  function setStatus(text, progress) {
+  // what the page is doing: a line, the progress bar (a fraction) and a line of details (how much,
+  // how fast, what happened). While the page is busy and neither line has changed for a while,
+  // the details say so (idle: e.g. "waiting for data"), the seconds counting, so that a long step
+  // never looks frozen
+  const QUIET_MS = 5000;
+  let busy = false;
+  // the engine is starting: until its main loop runs, the loading view stays and says what it is
+  // doing (the engine's latest line, see log() and start())
+  let startingGame = false;
+  let statusChanged = Date.now();
+  let statusDetail = '';
+  let statusIdle = '';
+  function setStatus(text, progress, detail = '', idle = 'still working') {
+    if (text !== statusEl.textContent || detail !== statusDetail) statusChanged = Date.now();
     statusEl.textContent = text;
+    statusDetail = detail;
+    statusIdle = idle;
+    showStatusDetail();
     if (progress !== undefined) {
       progressEl.hidden = false;
       progressEl.value = progress;
     }
   }
+  function showStatusDetail() {
+    const quiet = Date.now() - statusChanged;
+    const idle = busy && quiet >= QUIET_MS ? `${statusIdle} · ${Math.round(quiet / 1000)} s` : '';
+    statusDetailEl.textContent = [statusDetail, idle].filter((part) => part).join(' · ');
+  }
+  setInterval(showStatusDetail, 1000);
+
+  const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
+  // how fast a download goes, over the last few seconds ("2.1 MB/s"; '' at first): called with the
+  // bytes done so far
+  function rateMeter() {
+    const samples = [];
+    return (bytes) => {
+      const now = performance.now();
+      samples.push([now, bytes]);
+      while (samples.length > 2 && now - samples[0][0] > 4000) samples.shift();
+      const [then, before] = samples[0];
+      return now - then >= 1000 ? `${megabytes((bytes - before) / ((now - then) / 1000))} MB/s` : '';
+    };
+  }
 
   // the game can't go on: say what happened, what to do about it, and offer to start
   // over (the page has to be loaded again for that) or to clear what is stored
   function showError(text, { hint = '', details = '' } = {}) {
+    busy = false;
+    startingGame = false;
     PageFullscreen.exit();
     document.exitPointerLock?.();
     overlay.hidden = false;
@@ -514,8 +557,9 @@
         stopKeeping(e);
       }
     }
-    const progress = (bytes) => setStatus(`Preparing the game files… ${Math.round(100 * bytes / totalBytes)}%`,
-      bytes / totalBytes);
+    // (and the file, how much of it)
+    const progress = (bytes, file, fileBytes = 0) => setStatus(`Preparing the game files… ${Math.round(100 * bytes / totalBytes)}%`,
+      bytes / totalBytes, `${file.path} · ${megabytes(fileBytes)} of ${megabytes(file.size)} MB`);
     // (the version's group files are kept in pieces and read from there as the game needs them,
     // see archives.js; as long as they can be kept in this browser)
     const pieces = new Set();
@@ -526,7 +570,7 @@
     };
     for (const file of dataFiles) {
       const { path, size, read } = file;
-      progress(doneBytes);
+      progress(doneBytes, file);
       const fullPath = `${file.root || '/data/'}${path}`;
       FS.mkdirTree(fullPath.slice(0, fullPath.lastIndexOf('/')));
       // a demo's, downloaded: read from its pieces too
@@ -546,7 +590,7 @@
       if (keeping && file.stream && /\.gro$/i.test(path)) {
         try {
           const kept = await GameArchives.store(await OwnFiles.open(), storeKey(file), await file.stream(),
-            22 + 65535, (bytes) => progress(doneBytes + bytes));
+            22 + 65535, (bytes) => progress(doneBytes + bytes, file, bytes));
           if (kept.size !== size) {
             const error = new Error(`${path} is damaged or incomplete.`);
             error.damaged = true;
@@ -641,7 +685,22 @@
       return;
     }
     started = true;
-    overlay.hidden = true;
+    startingGame = true;
+    busy = true;
+    startButton.hidden = true;
+    progressEl.hidden = true;
+    setStatus('Starting the game…');
+    const waiting = setInterval(() => {
+      if (!startingGame) {
+        clearInterval(waiting);
+      } else if (gameRunning()) {
+        clearInterval(waiting);
+        startingGame = false;
+        busy = false;
+        overlay.hidden = true;
+        canvas.focus();
+      }
+    }, 100);
     // (the browser only allows this while handling a click)
     if (fullscreenCheckbox.checked && !params.has('autostart')) {
       PageFullscreen.enter();
@@ -674,6 +733,7 @@
       showError(`The game files can't be used: ${e.message}`, { hint: startupHint() });
       return;
     }
+    busy = false;
     setStatus('Ready', 1);
     if (params.has('autostart')) {
       start();
@@ -787,13 +847,13 @@
       return prefix + path;
     },
     setStatus(text) {
-      // "Downloading data... (123/456)"
+      // the base package's download (Emscripten's file packager): "Downloading data... (123/456)"
       const m = text.match(/\((\d+(?:\.\d+)?)\/(\d+)\)/);
       if (m) {
-        const fraction = Number(m[1]) / Number(m[2]);
-        setStatus(`Downloading game data… ${Math.round(fraction * 100)}%`, fraction);
-      } else if (text) {
-        setStatus(text);
+        gameDownloads.data = { done: Number(m[1]), total: Number(m[2]) };
+        showGameDownloads();
+      } else if (text === 'Running...') {
+        setStatus('Starting the game engine…');
       }
     },
     onRuntimeInitialized() {
@@ -819,6 +879,58 @@
     },
   };
 
+  // the engine's download (its .wasm, see watchEngineDownload()) and the base package's: { done,
+  // total } each (total 0: not known). Shown one after the other (or together while both go on,
+  // which they mostly don't), so that the bar doesn't go back when the second one starts
+  const gameDownloads = {};
+  const GAME_PARTS = { engine: 'the game engine', data: 'the game\'s data' };
+  const gameDownloadRates = {};
+  function showGameDownloads() {
+    const going = Object.entries(gameDownloads).filter(([, part]) => !(part.total && part.done >= part.total));
+    if (going.length === 0) {
+      setStatus('Starting the game engine…', 1);
+      return;
+    }
+    const [name, { done, total }] = going.length === 1 ? going[0] : ['game', {
+      done: going.reduce((sum, [, part]) => sum + part.done, 0),
+      total: going.every(([, part]) => part.total) ? going.reduce((sum, [, part]) => sum + part.total, 0) : 0,
+    }];
+    const rate = gameDownloadRates[name] = gameDownloadRates[name] || rateMeter();
+    setStatus(`Downloading ${GAME_PARTS[name] || 'the game'}…${total ? ` ${Math.round(100 * done / total)}%` : ''}`,
+      total ? done / total : undefined,
+      [`${megabytes(done)}${total ? ` of ${megabytes(total)}` : ''} MB`, rate(done)].filter((part) => part).join(' · '),
+      'waiting for data');
+  }
+
+  // the engine's .wasm, which its script fetches: its download shown as it goes (passed on as a
+  // stream with the same headers, so the browser still compiles it as it arrives)
+  function watchEngineDownload() {
+    const fetchBefore = window.fetch;
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (!/\.wasm(\?|$)/.test(url)) return fetchBefore(input, init);
+      window.fetch = fetchBefore;
+      const response = await fetchBefore(input, init);
+      if (!response.ok || !response.body) return response;
+      // (the size, unless the server compressed it on the way)
+      const total = response.headers.get('Content-Encoding') ? 0 : Number(response.headers.get('Content-Length')) || 0;
+      gameDownloads.engine = { done: 0, total };
+      showGameDownloads();
+      const body = response.body.pipeThrough(new TransformStream({
+        transform(chunk, controller) {
+          gameDownloads.engine.done += chunk.length;
+          showGameDownloads();
+          controller.enqueue(chunk);
+        },
+        flush() {
+          gameDownloads.engine.total = gameDownloads.engine.done;
+          showGameDownloads();
+        },
+      }));
+      return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    };
+  }
+
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -837,6 +949,7 @@
       return;
     }
     loading = true;
+    busy = true;
     chooseEl.hidden = true;
     loadingEl.hidden = false;
     setStatus('Loading…', 0);
@@ -844,6 +957,8 @@
     log(`Using the ${build} build`);
     try {
       await prepareData();
+      setStatus('Loading the game…');
+      watchEngineDownload();
       await loadScript(`${build}/${Game.engine}.js`);
     } catch (e) {
       showError(e.message);
@@ -857,6 +972,17 @@
       const list = (name) => (params.get(name) ? params.get(name).split(',').filter((u) => u) : null);
       dataFiles = [];
       for (const [i, demo] of Game.demos.entries()) {
+        // (how much, how fast, and for a while what happened when a request failed)
+        const rate = rateMeter();
+        let note = '';
+        let noteUntil = 0;
+        let shown = { fraction: 0, done: 0, total: 0 };
+        const show = () => {
+          const { fraction, done, total } = shown;
+          setStatus(`Downloading ${demo.name}… ${Math.round(fraction * 100)}%`, (i + fraction) / Game.demos.length,
+            [total ? `${megabytes(done)} of ${megabytes(total)} MB` : '', total ? rate(done) : '',
+              performance.now() < noteUntil ? note : ''].filter((part) => part).join(' · '), 'waiting for data');
+        };
         const files = await DemoDownload.download({
           base: `demo/${demo.folder}/`,
           prefix: demo.prefix,
@@ -865,9 +991,14 @@
           // (a mirror has a copy of the site's demo/ folder)
           mirrors: (list('mirror') || []).map((url) => new URL(`${demo.folder}/`, url.replace(/\/?$/, '/')).href),
           log,
-          onProgress(fraction) {
-            const done = (i + fraction) / Game.demos.length;
-            setStatus(`Downloading ${demo.name}… ${Math.round(fraction * 100)}%`, done);
+          onProgress(fraction, { done = 0, total = 0 } = {}) {
+            shown = { fraction, done, total };
+            show();
+          },
+          onNote(text) {
+            note = text;
+            noteUntil = performance.now() + 15000;
+            show();
           },
         }).catch((e) => {
           if (!navigator.onLine) throw new Error('You are offline: the demos can be downloaded once you are online.');

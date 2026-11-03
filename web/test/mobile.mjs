@@ -1,6 +1,7 @@
 // Starts the game the way a phone player does (tapping Play, Start and NETRICSA's
-// Exit) on emulated phones, then checks that the touch controls drive the game; and that
-// all of the start page can be scrolled to.
+// Exit) on emulated phones, then checks that the touch controls drive the game; that all of
+// the start page can be scrolled to; and that the loading view says what is happening, up to
+// the game running.
 // The iPhone run removes what iPhone Safari lacks: element fullscreen, pointer lock
 // and JSPI.
 //
@@ -23,6 +24,19 @@ const IPHONE_LIMITS = () => {
   delete WebAssembly.Suspending;
 };
 
+// what the loading view says, as it changes: { status, detail, overlay (shown) }
+const RECORD_STATUS = () => {
+  window.statusSeen = [];
+  document.addEventListener('DOMContentLoaded', () => {
+    const status = document.getElementById('status');
+    const detail = document.getElementById('status-detail');
+    const overlay = document.getElementById('overlay');
+    const note = () => window.statusSeen.push({ status: status.textContent, detail: detail.textContent, overlay: !overlay.hidden });
+    new MutationObserver(note).observe(document.getElementById('loading'), { subtree: true, childList: true, characterData: true });
+    new MutationObserver(note).observe(overlay, { attributes: true, attributeFilter: ['hidden'] });
+  });
+};
+
 const runs = [
   { name: 'android', browserType: chromium, device: devices['Pixel 7'], args: ['--use-angle=metal'] },
   { name: 'iphone', browserType: webkit, device: devices['iPhone 13'], init: IPHONE_LIMITS },
@@ -36,6 +50,7 @@ for (const run of runs) {
   const { width, height } = run.device.viewport;
   const context = await browser.newContext({ ...run.device, viewport: { width: height, height: width } });
   if (run.init) await context.addInitScript(run.init);
+  await context.addInitScript(RECORD_STATUS);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.stack || e.message));
@@ -59,6 +74,22 @@ for (const run of runs) {
     results['the game started'] = await page.waitForFunction(
       () => window.engineLog.some((l) => l.includes('Adding player')), null, { timeout: 120000 }).then(() => true, () => false);
     results['touch controls are on'] = await page.evaluate(() => !!document.querySelector('.touch-controls'));
+    // the loading view: the demos' bytes, the engine starting, then what the engine says until it
+    // runs, when it goes
+    const seen = await page.evaluate(() => window.statusSeen);
+    const has = (test) => seen.some(test);
+    const engineLine = (seen.find((s) => s.status === 'Starting the game…' && s.detail) || {}).detail;
+    const said = {
+      demoBytes: has((s) => /^Downloading .*demo/.test(s.status) && / of [\d.]+ MB/.test(s.detail)),
+      engine: has((s) => s.status === 'Starting the game engine…'),
+      starting: has((s) => s.status === 'Starting the game…' && s.overlay) && !!engineLine,
+      // (once the engine's main loop runs, a little after the player is added)
+      gone: await page.waitForFunction(() => document.getElementById('overlay').hidden, null, { timeout: 30000 })
+        .then(() => true, () => false),
+    };
+    results[`the loading view said what was happening, up to the game running (${engineLine || 'no engine line'}; `
+      + `${Object.entries(said).filter(([, ok]) => !ok).map(([what]) => `not ${what}`).join(', ') || 'all of it'})`] =
+      Object.values(said).every((ok) => ok);
     await page.waitForTimeout(3000);
     const vp = page.viewportSize();
     await page.touchscreen.tap(vp.width - 15, 8);  // NETRICSA's Exit

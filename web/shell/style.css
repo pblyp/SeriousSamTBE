@@ -103,6 +103,11 @@ button:focus-visible, .secondary:focus-visible {
   margin: 0.5rem 0;
   min-height: 1.5em;
 }
+/* (how much, how fast, what happened: its line is kept, so that the view doesn't jump) */
+#status-detail {
+  min-height: 1.4em;
+  font-variant-numeric: tabular-nums;
+}
 progress {
   width: 100%;
   accent-color: var(--accent);

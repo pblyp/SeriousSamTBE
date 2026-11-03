@@ -7,7 +7,8 @@
 //  4. from the site, when the mirror doesn't have the files
 //  5. from an http address that isn't localhost (like a computer on the local network)
 //  6. a mirror whose connection stalls (sends a little, then nothing): given up, from the site
-// and that the kept demos can be exported as a .zip ("Export the demos…"), all of their files as
+// what the loading view's details say as it downloads (how much, and what happened when a request
+// failed), and that the kept demos can be exported as a .zip ("Export the demos…"), all of their files as
 // the site has them, but not before they are all downloaded
 //
 //   node demo-download.mjs
@@ -62,6 +63,15 @@ async function openPage(query, { context = null, cutShort = false, origin = serv
   context = context || await browser.newContext({ viewport: { width: 640, height: 400 }, serviceWorkers: 'block' });
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.stack || e.message));
+  // (the loading view's details, as they change)
+  await page.addInitScript(() => {
+    window.detailsSeen = [];
+    document.addEventListener('DOMContentLoaded', () => {
+      const detail = document.getElementById('status-detail');
+      new MutationObserver(() => window.detailsSeen.push(detail.textContent))
+        .observe(detail, { subtree: true, childList: true, characterData: true });
+    });
+  });
   page.demoRequests = [];
   page.on('request', (r) => {
     const { pathname } = new URL(r.url());
@@ -165,6 +175,9 @@ const show = (d) => (d ? `${d[0]} MB, ${d[1]} MB from the site, ${d[2]} MB from 
   const page = await openPage('');
   const first = await ready(page);
   const firstDownload = await downloaded(page);
+  const details = await page.evaluate(() => window.detailsSeen);
+  const howMuch = details.find((d) => / of [\d.]+ MB/.test(d));
+  results[`the loading view says how much is downloaded (${howMuch || details.slice(-3).join(' | ') || 'nothing'})`] = !!howMuch;
   const firstRequests = page.demoRequests.length;
   page.demoRequests = [];
   await page.reload();
@@ -268,6 +281,8 @@ const show = (d) => (d ? `${d[0]} MB, ${d[1]} MB from the site, ${d[2]} MB from 
   const whole = await ready(page);
   const download = await downloaded(page);
   const said = (await engineLog(page)).filter((l) => l.startsWith('Demo download:'));
+  const shown = (await page.evaluate(() => window.detailsSeen)).find((d) => /No data for 2 s/.test(d));
+  results[`the loading view says what happened (${shown || 'nothing'})`] = !!shown;
   results[`a mirror that stalls is given up, then from the site (${said.at(-1) || 'nothing said'}; ${show(download)})`] = whole
     && said.some((l) => /No data for 2 s/.test(l)) && said.some((l) => /; from the site$/.test(l))
     && download && isWholeDemo(download[1]);
