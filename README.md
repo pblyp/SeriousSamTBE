@@ -1,12 +1,12 @@
 ## Serious Sam Classic: The Both Encounters in the browser
-[![Web version](https://github.com/pblyp/SeriousSamClassic/actions/workflows/web-pages.yml/badge.svg)](https://github.com/pblyp/SeriousSamClassic/actions/workflows/web-pages.yml)
+[![Web version](https://github.com/pblyp/SeriousSamTBE/actions/workflows/web-pages.yml/badge.svg)](https://github.com/pblyp/SeriousSamTBE/actions/workflows/web-pages.yml)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 Serious Engine 1.10 compiled to WebAssembly and rendering with WebGL 2: *Serious Sam: The
 First Encounter* and *Serious Sam: The Second Encounter* as one campaign (The Both Encounters),
 playable in a web browser on computers and phones.
 
-**Play it: <https://pblyp.github.io/SeriousSamClassic/>**
+**Play it: <https://pblyp.github.io/SeriousSamTBE/>**
 
 - **One campaign.** It runs The Second Encounter's code, which also plays The First
   Encounter's levels: when they end, its credits roll and The Second Encounter's first level
@@ -85,8 +85,8 @@ sudo apt install cmake ninja-build flex bison g++ libsdl2-dev zlib1g-dev libogg-
 ### Building
 
 ```sh
-git clone -b web-port https://github.com/pblyp/SeriousSamClassic.git
-cd SeriousSamClassic
+git clone -b web-port https://github.com/pblyp/SeriousSamTBE.git
+cd SeriousSamTBE
 
 git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
 ~/emsdk/emsdk install 6.0.12 && ~/emsdk/emsdk activate 6.0.12
@@ -132,7 +132,7 @@ Open <http://localhost:8080/>. Other devices on your network open
 4. Settings → **Environments** → **github-pages**: allow the `web-port` branch to deploy.
 5. Actions → **Web version (GitHub Pages)** → **Run workflow**.
 
-The site is then at `https://<user>.github.io/SeriousSamClassic/`.
+The site is then at `https://<user>.github.io/SeriousSamTBE/`.
 
 Pages allows 100 GB of traffic a month: [demo mirrors](web/README.md#demo-mirrors) take
 load off the site. Network games don't work there (Pages can't pass them on).
