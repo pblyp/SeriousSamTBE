@@ -34,7 +34,9 @@ playable in a web browser on computers and phones.
   the browser keeps as .zip files, which *Use my game files…* takes back. Exported game files
   are for your personal use only, the full games' above all: please don't share them.
 
-It runs in current Chrome, Edge, Firefox and Safari (desktop, Android and iOS).
+It runs in current Chrome, Edge, Firefox and Safari. Basic gameplay was tested on Android, iOS,
+iPadOS and Xbox, and in desktop browsers on macOS and Linux. Budget devices play at a lower frame
+rate: it sometimes dips to 25–30 fps, depending on what is in view.
 
 This is a fork of [SeriousSamClassic](https://github.com/tx00100xt/SeriousSamClassic)
 (the Linux, BSD and macOS port of Croteam's open source Serious Engine). The web version
